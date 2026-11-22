@@ -28,6 +28,20 @@ $rows = foreach ($device in $devices) {
     $description = $null
     $hardwareIds = @()
     $battery = $null
+    $batterySource = $null
+
+    # Generic Windows shell battery property. It is not populated for every
+    # peripheral, but when present it represents remaining battery life in %.
+    try {
+        $p = Get-PnpDeviceProperty -InstanceId $device.InstanceId -KeyName '{49CD1F76-5626-4B17-A4E8-18B4AA1A2213} 10' -ErrorAction Stop
+        if ($null -ne $p.Data) {
+            $candidate = [int]$p.Data
+            if ($candidate -ge 0 -and $candidate -le 100) {
+                $battery = $candidate
+                $batterySource = 'System.Devices.BatteryLife'
+            }
+        }
+    } catch {}
 
     try {
         $p = Get-PnpDeviceProperty -InstanceId $device.InstanceId -KeyName 'DEVPKEY_Device_Manufacturer' -ErrorAction Stop
@@ -44,10 +58,16 @@ $rows = foreach ($device in $devices) {
         $hardwareIds = @($p.Data)
     } catch {}
 
-    if ($device.InstanceId -match '^(BTHENUM|BTHLE)\\DEV_') {
+    if ($null -eq $battery -and $device.InstanceId -match '^(BTHENUM|BTHLE)\\DEV_') {
         try {
             $p = Get-PnpDeviceProperty -InstanceId $device.InstanceId -KeyName '{104EA319-6EE2-4701-BD47-8DDBF425BBE5} 2' -ErrorAction Stop
-            if ($null -ne $p.Data) { $battery = [int]$p.Data }
+            if ($null -ne $p.Data) {
+                $candidate = [int]$p.Data
+                if ($candidate -ge 0 -and $candidate -le 100) {
+                    $battery = $candidate
+                    $batterySource = 'DEVPKEY_Bluetooth_Battery'
+                }
+            }
         } catch {}
     }
 
@@ -60,6 +80,7 @@ $rows = foreach ($device in $devices) {
         instanceId = $device.InstanceId
         hardwareIds = @($hardwareIds)
         battery = $battery
+        batterySource = $batterySource
     }
 }
 
