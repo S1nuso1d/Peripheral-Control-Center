@@ -219,7 +219,7 @@ def read_devices(force: bool = False) -> list[dict]:
             status = {
                 "provider": "ble_gatt", "available": BleakScanner is not None,
                 "status": "provider_error", "scanned": 0, "candidates": 0,
-                "read": 0, "errors": [f"{type(exc).__name__}: {exc}"[:240]],
+                "read": 0, "errors": [_safe_error(exc)],
                 "last_scan": time.time(),
             }
 
