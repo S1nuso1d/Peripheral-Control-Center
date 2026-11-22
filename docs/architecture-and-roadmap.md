@@ -48,3 +48,16 @@ ARDOR support is not implemented in this repository yet. The next step is to ide
 ## Long-term direction
 
 The platform should remain manufacturer-independent. Vendor integrations belong in providers; the core owns discovery scheduling, normalized device state, history, notifications, settings, and UI. Adding a provider should not require rewriting the UI or the history subsystem.
+
+
+## Implemented: HID inventory (0.2.0 foundation)
+
+The tray menu now exposes a read-only HID inventory window. It lists every interface returned by hid.enumerate(0, 0), including vendor-defined interfaces that are not yet supported by a battery provider. The inventory reports VID/PID, manufacturer, product, interface number, usage page, usage, and transport when hidapi can identify it.
+
+The discovery layer deliberately does not expose raw HID paths or serial numbers. It derives a short SHA-256 fingerprint from the path for stable per-interface identifiers. A vendor-defined usage page is only a protocol-research hint; it is not evidence that the device exposes battery telemetry.
+
+The full diagnostic report is also available from the tray menu. It combines Windows PnP, Bluetooth battery-property, HID interface, and XInput observations. This makes it possible to tell whether Windows sees a device even when no supported battery provider can read it.
+
+### Next discovery milestone
+
+The current inventory is HID-focused. It does not yet represent every non-HID PnP node, Bluetooth GATT service, or composite-device parent/child relationship. Those require a separate Windows device-enumeration layer and explicit device identity rules. Vendor protocol writes must remain disabled until validated against the exact physical model and receiver.

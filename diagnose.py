@@ -16,10 +16,7 @@ import sys
 import time
 from pathlib import Path
 
-try:
-    import hid  # pip install hidapi
-except Exception:
-    hid = None
+from device_inventory import discover_hid_interfaces, hid_available
 
 PS_PNP = r"""
 $ErrorActionPreference = 'SilentlyContinue'
@@ -39,9 +36,6 @@ Get-PnpDevice -PresentOnly |
 """
 
 VID_PID = re.compile(r"VID_([0-9A-F]{4})&PID_([0-9A-F]{4})", re.I)
-KNOWN_USAGE_PAGES = {0x01: "Generic Desktop", 0x06: "Generic Device Controls (батарея)",
-                     0x0C: "Consumer", 0xFF00: "Vendor-defined (часто HID++/служебный)",
-                     0xFF01: "Vendor-defined", 0xFF02: "Vendor-defined", 0xFF43: "Vendor-defined"}
 
 
 def _mask(instance_id: str) -> str:
@@ -62,7 +56,7 @@ def _powershell(script: str, timeout: int = 90) -> str:
 def section_system() -> list:
     return [f"Дата: {time.strftime('%Y-%m-%d %H:%M:%S')}",
             f"Windows: {platform.platform()}",
-            f"Python: {sys.version.split()[0]}  hidapi: {'есть' if hid else 'НЕ установлен'}"]
+            f"Python: {sys.version.split()[0]}  hidapi: {'есть' if hid_available() else 'НЕ установлен'}"]
 
 
 def section_pnp() -> list:
@@ -100,24 +94,24 @@ def section_pnp() -> list:
 
 
 def section_hid() -> list:
-    if hid is None:
-        return ["hidapi не установлен: pip install hidapi (без него HID-интерфейсы не показать)"]
     try:
-        infos = hid.enumerate(0, 0)
+        devices = discover_hid_interfaces()
     except Exception as e:
-        return [f"hid.enumerate не удался: {e!r}"]
-    rows = {}
-    for i in infos:
-        key = (i.get("vendor_id", 0), i.get("product_id", 0), i.get("usage_page", 0),
-               i.get("usage", 0), i.get("interface_number", -1))
-        rows[key] = (i.get("manufacturer_string") or "", i.get("product_string") or "")
+        return [f"Не удалось перечислить HID-интерфейсы: {e!r}"]
+
     lines = []
-    for (vid, pid, page, usage, iface), (man, prod) in sorted(rows.items()):
-        flag = "  <== ARDOR?" if "ardor" in (man + prod).lower() else ""
-        page_name = KNOWN_USAGE_PAGES.get(page, "")
-        lines.append(f"  {vid:04X}:{pid:04X}  iface {iface}  page 0x{page:04X} usage 0x{usage:04X}"
-                     f"  {man} / {prod}  {page_name}{flag}")
-    return lines or ["  (HID-устройств не найдено)"]
+    for device in devices:
+        label = (device["manufacturer"] + " " + device["product"]).lower()
+        flag = "  <== ARDOR?" if "ardor" in label else ""
+        lines.append(
+            f'  {device["vendor_id"]:04X}:{device["product_id"]:04X}  '
+            f'iface {device["interface_number"]}  '
+            f'page 0x{device["usage_page"]:04X} usage 0x{device["usage"]:04X}  '
+            f'{device["manufacturer"]} / {device["product"]}  '
+            f'{device["usage_page_name"]}  {device["transport"]}  '
+            f'{device["protocol_hint"]}  fingerprint {device["path_fingerprint"]}{flag}'
+        )
+    return lines or ["  (HID-интерфейсов не найдено)"]
 
 
 def section_xinput() -> list:
@@ -143,7 +137,7 @@ def section_xinput() -> list:
 
 
 def build_report() -> str:
-    out = ["=== Battery Tray: диагностика ===", ""]
+    out = ["=== Peripheral Control Center: диагностика ===", ""]
     for title, fn in (("Система", section_system), ("Устройства Windows", section_pnp),
                       ("HID-интерфейсы (hidapi)", section_hid), ("XInput", section_xinput)):
         out.append(f"## {title}")

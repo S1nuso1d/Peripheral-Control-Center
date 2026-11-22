@@ -37,6 +37,7 @@ import taskbar
 from history import History, format_hours
 from i18n import tr
 from settings_dialog import DevicesDialog
+from device_inventory_dialog import DeviceInventoryDialog
 
 APP_NAME = "BatteryTray"
 DATA_DIR = Path(os.environ.get("LOCALAPPDATA", str(Path.home()))) / APP_NAME
@@ -788,6 +789,8 @@ class App:
         m = self.menu
         m.clear()
         m.addAction(tr("m_refresh"), self.monitor.refresh)
+        m.addAction(tr("m_inventory"), self.open_inventory_dialog)
+        m.addAction(tr("m_diagnostics"), self.open_diagnostics_report)
 
         sub = m.addMenu(tr("m_devices"))
         if not self.devices:
@@ -839,6 +842,22 @@ class App:
             act.triggered.connect(lambda _=False, v=value: setter(v))
             group.addAction(act)
             sub.addAction(act)
+
+    def open_inventory_dialog(self):
+        """Show every HID interface, even when no battery provider supports it."""
+        dialog = DeviceInventoryDialog()
+        dialog.exec()
+
+    def open_diagnostics_report(self):
+        """Generate and open the full Windows / Bluetooth / HID diagnostic report."""
+        try:
+            from diagnose import write_report
+            report = write_report(DATA_DIR)
+            os.startfile(str(report))
+        except Exception:
+            log.exception("cannot create diagnostics report")
+            self.notify(tr("diagnostics_error_title"), tr("diagnostics_error_message"),
+                        QSystemTrayIcon.Warning)
 
     # --- обработчики настроек ---
 

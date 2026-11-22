@@ -13,6 +13,9 @@ Peripheral Control Center brings battery information from supported wireless dev
 - Low-battery and fully-charged notifications.
 - Per-device display names, device categories, visibility, refresh interval, and language settings.
 - Russian and English interface strings.
+- HID inventory window showing every interface visible to hidapi, including devices without battery telemetry.
+- Copyable HID inventory report without raw HID paths or serial numbers.
+- Full Windows / Bluetooth / HID diagnostics report accessible from the tray menu.
 - Battery history and an approximate remaining-time estimate based on collected history.
 - Separate data providers for the currently implemented sources:
   - **Bluetooth / Windows device properties** — devices for which Windows exposes the `DEVPKEY_Bluetooth_Battery` property.
@@ -84,7 +87,9 @@ The GitHub Actions workflow in `.github/workflows/ci.yml` runs the tests on Wind
 
 ```text
 app files (current implementation)
-├── battery_tray.py       # Windows tray app, UI, device collection, providers
+├── battery_tray.py       # Windows tray app, UI, battery providers
+├── device_inventory.py   # Read-only HID enumeration and metadata normalization
+├── device_inventory_dialog.py # HID inventory UI
 ├── hidpp.py              # Logitech HID++ communication
 ├── history.py            # Battery history and estimates
 ├── taskbar.py            # Windows taskbar geometry and mini-widget
@@ -107,10 +112,11 @@ The current data directory remains `%LOCALAPPDATA%\BatteryTray` for compatibilit
 
 1. Stabilize the current Windows application and its test/build workflow.
 2. Introduce a documented provider interface and normalized device model.
-3. Add diagnostics for detected Bluetooth and HID interfaces (VID/PID, usage page, usage, manufacturer, product, and provider result).
-4. Implement and physically validate an ARDOR GAMING provider for the user's device models.
-5. Add providers for more manufacturers and connection types.
-6. Expand monitoring beyond battery level where hardware and public protocols allow it.
+3. Expand inventory discovery from HID interfaces to relevant Windows PnP and Bluetooth device nodes.
+4. Add provider-result diagnostics that connect each discovered interface to the telemetry source that attempted to read it.
+5. Implement and physically validate an ARDOR GAMING provider for the user's device models.
+6. Add providers for more manufacturers and connection types.
+7. Expand monitoring beyond battery level where hardware and public protocols allow it.
 
 See [docs/architecture-and-roadmap.md](docs/architecture-and-roadmap.md) for the proposed provider architecture.
 
