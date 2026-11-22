@@ -59,6 +59,8 @@ class DeviceInventoryDialogTests(unittest.TestCase):
         self.assertIn("ARDOR GAMING", dialog.report_text())
         self.assertIn("25A7:FA7C", dialog.report_text())
         self.assertIn("PnP | ARDOR Receiver", dialog.report_text())
+        self.assertIn("PnP candidates: 1", dialog.report_text())
+        self.assertIn("candidate only (not merged): ARDOR Receiver", dialog.report_text())
         self.assertNotIn("serial_number", dialog.report_text().lower())
         dialog.close()
 
