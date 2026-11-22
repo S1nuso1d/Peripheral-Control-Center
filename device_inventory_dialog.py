@@ -3,20 +3,12 @@ from __future__ import annotations
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
-    QApplication,
-    QAbstractItemView,
-    QDialog,
-    QHBoxLayout,
-    QLabel,
-    QPushButton,
-    QTabWidget,
-    QTableWidget,
-    QTableWidgetItem,
-    QVBoxLayout,
-    QWidget,
+    QApplication, QAbstractItemView, QDialog, QHBoxLayout, QLabel, QPushButton,
+    QTabWidget, QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget,
 )
 
 from device_inventory import discover_hid_interfaces
+from device_correlator import correlate_hid_to_pnp
 from i18n import tr
 from windows_device_inventory import discover_windows_devices
 
@@ -25,22 +17,13 @@ class DeviceInventoryDialog(QDialog):
     """Show HID interfaces and Windows PnP nodes without issuing device commands."""
 
     HID_COLUMNS = (
-        "inventory_device",
-        "inventory_manufacturer",
-        "inventory_vid_pid",
-        "inventory_interface",
-        "inventory_usage_page",
-        "inventory_usage",
-        "inventory_transport",
-        "inventory_protocol",
+        "inventory_device", "inventory_manufacturer", "inventory_vid_pid",
+        "inventory_interface", "inventory_usage_page", "inventory_usage",
+        "inventory_transport", "inventory_pnp_matches", "inventory_protocol",
     )
     WINDOWS_COLUMNS = (
-        "inventory_device",
-        "inventory_manufacturer",
-        "inventory_vid_pid",
-        "inventory_class",
-        "inventory_transport",
-        "inventory_battery",
+        "inventory_device", "inventory_manufacturer", "inventory_vid_pid",
+        "inventory_class", "inventory_transport", "inventory_battery",
         "inventory_status",
     )
 
@@ -50,10 +33,10 @@ class DeviceInventoryDialog(QDialog):
         self._discover_windows = discover_windows_fn or discover_windows_devices
         self._devices = []
         self._windows_devices = []
+        self._pnp_matches = {}
 
         self.setWindowTitle(tr("inventory_title"))
-        self.resize(1240, 600)
-
+        self.resize(1320, 600)
         layout = QVBoxLayout(self)
         self.tabs = QTabWidget()
         layout.addWidget(self.tabs)
@@ -94,7 +77,6 @@ class DeviceInventoryDialog(QDialog):
         buttons.addStretch(1)
         buttons.addWidget(close_button)
         layout.addLayout(buttons)
-
         self.refresh()
 
     @staticmethod
@@ -135,29 +117,24 @@ class DeviceInventoryDialog(QDialog):
             self._windows_devices = []
             windows_error = str(exc)
 
+        self._pnp_matches = correlate_hid_to_pnp(self._devices, self._windows_devices)
         self._fill_table(
-            self.table,
-            self._devices,
+            self.table, self._devices,
             lambda device: (
-                device["product"],
-                device["manufacturer"],
+                device["product"], device["manufacturer"],
                 f'{device["vendor_id"]:04X}:{device["product_id"]:04X}',
                 device["interface_number"],
                 f'0x{device["usage_page"]:04X} · {device["usage_page_name"]}',
-                f'0x{device["usage"]:04X}',
-                device["transport"],
+                f'0x{device["usage"]:04X}', device["transport"],
+                len(self._pnp_matches.get(device["id"], [])),
                 device["protocol_hint"],
             ),
         )
         self._fill_table(
-            self.windows_table,
-            self._windows_devices,
+            self.windows_table, self._windows_devices,
             lambda device: (
-                device["name"],
-                device["manufacturer"],
-                device["vid_pid"],
-                device["device_class"],
-                device["transport"],
+                device["name"], device["manufacturer"], device["vid_pid"],
+                device["device_class"], device["transport"],
                 f'{device["battery"]}%' if device["battery"] is not None else "—",
                 device["status"],
             ),
@@ -177,20 +154,25 @@ class DeviceInventoryDialog(QDialog):
 
     def report_text(self) -> str:
         """Return both inventories without raw HID/PnP instance paths or serial numbers."""
-        lines = [
-            tr("inventory_report_title"),
-            tr("inventory_count", len(self._devices)),
-            "",
-        ]
+        lines = [tr("inventory_report_title"),
+                 tr("inventory_count", len(self._devices)), ""]
         for device in self._devices:
+            candidates = self._pnp_matches.get(device["id"], [])
             lines.append(
                 f'HID | {device["product"]} | {device["manufacturer"]} | '
                 f'{device["vendor_id"]:04X}:{device["product_id"]:04X} | '
                 f'interface {device["interface_number"]} | '
                 f'usage page 0x{device["usage_page"]:04X} | '
                 f'usage 0x{device["usage"]:04X} | {device["transport"]} | '
+                f'PnP candidates: {len(candidates)} | '
                 f'{device["protocol_hint"]} | id {device["id"]}'
             )
+            for candidate in candidates:
+                lines.append(
+                    f'  candidate only (not merged): {candidate["name"]} | '
+                    f'{candidate["device_class"]} | {candidate["transport"]} | '
+                    f'id {candidate["id"]}'
+                )
 
         lines.extend(["", tr("windows_inventory_count", len(self._windows_devices))])
         for device in self._windows_devices:
