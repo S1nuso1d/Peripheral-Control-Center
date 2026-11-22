@@ -34,10 +34,15 @@ def section_pnp() -> list:
     lines = []
     for device in devices:
         battery = f'{device["battery"]}%' if device["battery"] is not None else "Windows не сообщает"
+        precision = ("категориальный уровень" if
+                      device.get("battery_precision") == "coarse" else "процент/значение")
+        charging = ("заряжается" if device.get("charging") else "не заряжается"
+                    if device.get("charging_known") else "статус зарядки неизвестен")
         lines.append(
             f'  {device["name"]} | {device["manufacturer"]} | '
             f'{device["vid_pid"]} | {device["device_class"]} | '
-            f'{device["transport"]} | статус {device["status"]} | заряд: {battery}'
+            f'{device["transport"]} | статус {device["status"]} | заряд: {battery} '
+            f'({precision}) | {charging} | источник: {device.get("battery_source") or "unknown"}'
         )
     return lines
 
