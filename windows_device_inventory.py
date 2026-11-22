@@ -31,7 +31,8 @@ $rows = foreach ($device in $devices) {
     $batterySource = $null
     $batteryPlusCharging = $null
 
-    # Windows also publishes a combined battery/charging status byte. Its
+    # System.Devices.BatteryPlusCharging (PKEY propID 22) combines the
+    # battery level category and charging state. Its
     # values are categorical bands, not exact percentages; the normalizer
     # maps them to the documented representative values and keeps the label.
     try {
