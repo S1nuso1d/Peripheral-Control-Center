@@ -86,6 +86,19 @@ class WindowsDeviceInventoryTests(unittest.TestCase):
         self.assertTrue(device["charging"])
         self.assertTrue(device["charging_known"])
 
+    def test_marks_canonical_battery_life_enum_values_as_coarse(self):
+        rows = [{
+            "name": "Bluetooth keyboard",
+            "status": "OK",
+            "deviceClass": "Bluetooth",
+            "instanceId": r"BTHLE\\DEV_123456789ABC",
+            "battery": 60,
+            "batterySource": "System.Devices.BatteryLife",
+        }]
+        device = normalize_pnp_devices(rows)[0]
+        self.assertEqual(device["battery"], 60)
+        self.assertEqual(device["battery_precision"], "coarse")
+
     def test_unknown_combined_status_falls_back_to_windows_battery_life(self):
         rows = [{
             "name": "Wireless headset",
