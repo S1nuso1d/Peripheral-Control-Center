@@ -63,14 +63,26 @@ def section_hid() -> list:
     return lines or ["  (HID-интерфейсов не найдено)"]
 
 
-def section_battery_providers() -> list:
-    """Run the new read-only providers once and include explicit outcomes."""
+def section_battery_providers(force: bool = False) -> list:
+    """Report provider state; deep scans run only in the standalone CLI mode."""
     lines = []
+    app_module = sys.modules.get("battery_tray")
+    app_status = getattr(app_module, "PROVIDER_STATUS", {}) if app_module else {}
+    for name in ("bluetooth", "ble_gatt", "hid_battery", "xinput", "hidpp"):
+        current = app_status.get(name)
+        if current:
+            lines.append(
+                f'App provider {name}: {current.get("status")} | '
+                f'зарядов прочитано: {current.get("read", 0)}'
+            )
+            if current.get("error"):
+                lines.append(f'  ошибка: {current["error"]}')
 
     try:
         import ble_battery
-        devices = ble_battery.read_devices(force=True)
         status = ble_battery.diagnostics()
+        devices = (ble_battery.read_devices(force=True) if force else
+                   ble_battery.read_devices() if status.get("status") != "not_scanned" else [])
         lines.append(
             f'BLE Battery Service: {status.get("status")} | '
             f'видно BLE: {status.get("scanned", 0)} | '
@@ -86,8 +98,9 @@ def section_battery_providers() -> list:
 
     try:
         import hid_battery
-        devices = hid_battery.read_devices(force=True)
         status = hid_battery.diagnostics()
+        devices = (hid_battery.read_devices(force=True) if force else
+                   hid_battery.read_devices() if status.get("status") != "not_scanned" else [])
         lines.append(
             f'Standard HID Battery Strength: {status.get("status")} | '
             f'интерфейсов: {status.get("interfaces", 0)} | '
@@ -101,14 +114,8 @@ def section_battery_providers() -> list:
     except Exception as exc:
         lines.append(f'Standard HID Battery Strength: ошибка провайдера: {exc!r}')
 
-    try:
-        import hidpp
-        devices = hidpp.read_devices()
-        lines.append(f'Logitech HID++: прочитано устройств: {len(devices)}')
-        for device in devices:
-            lines.append(f'  {device["name"]}: {device["battery"]}%')
-    except Exception as exc:
-        lines.append(f'Logitech HID++: ошибка провайдера: {exc!r}')
+    if not app_status.get("hidpp"):
+        lines.append("Logitech HID++: провайдер ещё не запускался в этом процессе")
 
     return lines or ["  (провайдеры не вернули результатов)"]
 
@@ -135,11 +142,12 @@ def section_xinput() -> list:
     return lines or ["  (XInput-геймпадов нет)"]
 
 
-def build_report() -> str:
+def build_report(force_provider_scan: bool = False) -> str:
     out = ["=== Peripheral Control Center: диагностика ===", ""]
     for title, fn in (("Система", section_system), ("Устройства Windows", section_pnp),
                       ("HID-интерфейсы (hidapi)", section_hid),
-                      ("Провайдеры заряда (BLE / HID / Logitech)", section_battery_providers),
+                      ("Провайдеры заряда (BLE / HID / Logitech)", 
+                       lambda: section_battery_providers(force_provider_scan)),
                       ("XInput", section_xinput)):
         out.append(f"## {title}")
         try:
@@ -159,17 +167,17 @@ def build_report() -> str:
     return "\n".join(out)
 
 
-def write_report(directory) -> Path:
+def write_report(directory, force_provider_scan: bool = False) -> Path:
     directory = Path(directory)
     directory.mkdir(parents=True, exist_ok=True)
     path = directory / "diagnostics.txt"
-    text = build_report()
+    text = build_report(force_provider_scan=force_provider_scan)
     path.write_text(text, encoding="utf-8")
     return path
 
 
 if __name__ == "__main__":
     base = Path(os.environ.get("LOCALAPPDATA", ".")) / "BatteryTray"
-    p = write_report(base)
+    p = write_report(base, force_provider_scan=True)
     print(p.read_text(encoding="utf-8"))
     print(f"\nОтчёт сохранён: {p}")
