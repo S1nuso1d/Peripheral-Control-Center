@@ -10,12 +10,13 @@ def _hex_id(value):
     if value is None or value == "":
         return None
     try:
-        return f"{int(str(value), 16):04X}"
-    except (TypeError, ValueError):
-        try:
-            return f"{int(value):04X}"
-        except (TypeError, ValueError, OverflowError):
-            return None
+        if isinstance(value, int):
+            number = value
+        else:
+            number = int(str(value).strip().removeprefix("0x").removeprefix("0X"), 16)
+        return f"{number:04X}" if 0 <= number <= 0xFFFF else None
+    except (TypeError, ValueError, OverflowError):
+        return None
 
 
 def _transport_compatible(hid_transport, pnp_transport):
