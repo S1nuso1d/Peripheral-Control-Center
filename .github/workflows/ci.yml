@@ -33,7 +33,7 @@ jobs:
       - name: Install dependencies
         run: python -m pip install -r requirements.txt pyinstaller
       - name: Build executable
-        run: python -m PyInstaller --noconsole --onefile --name PeripheralControlCenter battery_tray.py
+        run: python -m PyInstaller --noconsole --onefile --collect-submodules bleak --collect-submodules winrt --name PeripheralControlCenter battery_tray.py
       - uses: actions/upload-artifact@v4
         with:
           name: PeripheralControlCenter-exe
