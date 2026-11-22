@@ -80,6 +80,7 @@ STR = {
     "inventory_usage_page": ("Usage page", "Usage page"),
     "inventory_usage": ("Usage", "Usage"),
     "inventory_transport": ("Подключение", "Transport"),
+    "inventory_pnp_matches": ("Совпадения PnP", "PnP matches"),
     "inventory_protocol": ("Поддержка данных", "Data support"),
     "inventory_hint": ("Здесь показаны HID-интерфейсы, видимые Windows через hidapi. Наличие интерфейса не означает, что устройство предоставляет заряд; для интерфейсов производителя может потребоваться отдельный протокол.",
                         "This lists HID interfaces visible through hidapi. An interface does not imply battery telemetry; vendor interfaces may require a dedicated protocol."),
