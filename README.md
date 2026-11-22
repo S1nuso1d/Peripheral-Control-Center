@@ -1,81 +1,119 @@
-# Battery Tray
+# Peripheral Control Center
 
-Заряд беспроводных устройств (наушники, мышь, клавиатура, геймпад…) в трее Windows 10/11,
-в мини-виджете у панели задач и во всплывающей карточке с графиком.
+**A Windows desktop application for discovering and monitoring connected PC peripherals.**
 
-## Запуск
+Peripheral Control Center brings battery information from supported wireless devices into one place: the Windows system tray, a compact taskbar widget, and a popup with battery history.
 
-Нужен Windows 10/11 и Python 3.10+ (при установке отметьте «Add Python to PATH»).
+> **Project status:** early development. The current codebase is the starting point for a broader, manufacturer-independent peripheral platform. Not every device exposes battery data to Windows, and manufacturer-specific receivers may require dedicated protocol providers.
 
-```
+## Current capabilities
+
+- Windows 10/11 system-tray application with a compact taskbar widget.
+- Popup device list with battery history (24 hours, 3 days, and 7 days).
+- Low-battery and fully-charged notifications.
+- Per-device display names, device categories, visibility, refresh interval, and language settings.
+- Russian and English interface strings.
+- Battery history and an approximate remaining-time estimate based on collected history.
+- Separate data providers for the currently implemented sources:
+  - **Bluetooth / Windows device properties** — devices for which Windows exposes the `DEVPKEY_Bluetooth_Battery` property.
+  - **XInput** — compatible wireless Xbox controllers; the API reports coarse battery levels rather than an exact percentage.
+  - **Logitech HID++** — supported Logitech devices using compatible USB receivers; requires `hidapi`.
+
+### Important compatibility note
+
+A device being paired or visible in Windows does **not** guarantee that Windows exposes its battery percentage. The current version does not yet include a dedicated ARDOR GAMING provider, nor generic Razer, SteelSeries, Corsair, or other vendor-receiver support. These integrations require device-specific protocol research and testing.
+
+## Requirements
+
+- Windows 10 or Windows 11.
+- Python 3.10 or newer (Python 3.12 is used by the build workflow).
+- `PySide6` for the desktop interface.
+- `hidapi` for the existing Logitech HID++ provider. It is optional if Logitech receiver support is not needed.
+
+## Run from source
+
+Open PowerShell in the repository directory:
+
+```powershell
+py -3.12 -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip
 pip install -r requirements.txt
-python battery_tray.py          # или pythonw battery_tray.py — без окна консоли
+python battery_tray.py
 ```
 
-Если `hidapi` не устанавливается, удалите его из `requirements.txt`: приложение работает и без него
-(тогда не будет поддержки Logitech на донглах).
+To launch without a console window:
 
-Иконка появится в трее (если не видна — нажмите ^ рядом с часами и перетащите её на панель).
-Клик по иконке или виджету — карточка. Клик по строке устройства раскрывает график,
-клик по графику переключает период (24 ч → 3 дня → 7 дней). Правая кнопка — меню.
-
-Настройки, история заряда и лог: `%LOCALAPPDATA%\BatteryTray`.
-
-## Диагностика
-
-Если устройство не появилось, откройте меню → «Диагностика устройств…» (или `python diagnose.py`).
-Отчёт `diagnostics.txt` покажет, что видит система: Bluetooth-устройства и заряд, который знает Windows,
-пары VID:PID у USB/HID, HID-интерфейсы с их usage page. Серийные номера и полные Bluetooth-адреса
-в отчёт не попадают. По нему можно понять, есть ли у устройства стандартный заряд или нужен
-протокол производителя.
-
-## Источники данных
-
-| Источник | Что покрывает | Заметки |
-|---|---|---|
-| bluetooth | любые Bluetooth-устройства (Classic и LE) | то, что Windows показывает в «Параметры → Bluetooth» |
-| xinput | геймпады Xbox на радиоадаптере | 4 грубых уровня вместо процентов |
-| hidpp | Logitech на донглах (Unifying, Bolt, Lightspeed) | точный процент и статус зарядки; функции 0x1004 и 0x1000 |
-
-Для Bluetooth-устройств Windows не сообщает статус зарядки — он выводится по росту уровня в истории.
-
-## Сборка
-
-```
-build_exe.bat                   # -> dist\BatteryTray.exe
-iscc installer.iss              # -> installer_out\BatteryTray-Setup.exe (нужен Inno Setup 6)
+```powershell
+.\.venv\Scripts\pythonw.exe .\battery_tray.py
 ```
 
-Подпись (чтобы SmartScreen не ругался), нужен сертификат подписи кода:
+The application runs in the background. Look for its icon in the notification area near the clock; Windows may place it under the `^` hidden-icons menu.
 
-```
-signtool sign /fd SHA256 /tr http://timestamp.digicert.com /td SHA256 /a dist\BatteryTray.exe
+## Build a standalone executable
+
+Run on Windows from the repository directory:
+
+```powershell
+.\build_exe.bat
 ```
 
-## Тесты
+The executable is written to:
 
+```text
+dist\PeripheralControlCenter.exe
 ```
+
+To create an installer, install **Inno Setup 6** and run:
+
+```powershell
+iscc installer.iss
+```
+
+The installer is written to `installer_out\PeripheralControlCenter-Setup.exe`.
+
+## Run tests
+
+```powershell
 python -m unittest discover -s tests -t . -v
 ```
 
-Тесты логики работают без Qt; тесты интерфейса (отрисовка карточки, виджета, окна настроек)
-запускаются, если установлен PySide6. В CI (`.github/workflows/ci.yml`) гоняются оба набора
-на Windows, затем собирается exe.
+The GitHub Actions workflow in `.github/workflows/ci.yml` runs the tests on Windows and builds a standalone executable.
 
-## Структура
+## Project layout
 
-- `battery_tray.py` — приложение: провайдеры, карточка, виджет, меню
-- `history.py` — история заряда, оценка времени работы, определение зарядки
-- `hidpp.py` — протокол Logitech HID++ 2.0 (только чтение)
-- `taskbar.py` — положение панели задач и расчёт места для виджета
-- `settings_dialog.py` — окно «Настроить устройства»
-- `i18n.py` — русский и английский интерфейс
-- `diagnose.py` — отчёт о найденных устройствах и интерфейсах
-- `tests/` — автотесты
+```text
+app files (current implementation)
+├── battery_tray.py       # Windows tray app, UI, device collection, providers
+├── hidpp.py              # Logitech HID++ communication
+├── history.py            # Battery history and estimates
+├── taskbar.py            # Windows taskbar geometry and mini-widget
+├── settings_dialog.py    # Device settings dialog
+└── i18n.py               # Russian and English strings
 
-## Ограничения
+tests/
+└── test_app_logic.py     # Logic and UI smoke tests
 
-- Мини-виджет рассчитан на горизонтальную панель задач на основном мониторе; при автоскрытии панели и
-  вертикальной панели он скрывается.
-- Logitech G с функцией 0x1001 (батарея по напряжению) пока не читаются.
-- Другие бренды на донглах (Razer, SteelSeries, Corsair…) не поддержаны: у каждого свой протокол.
+.github/workflows/
+└── ci.yml                # Windows CI and executable build
+
+docs/
+└── architecture-and-roadmap.md
+```
+
+The current data directory remains `%LOCALAPPDATA%\BatteryTray` for compatibility with settings and history created by the original application. A later migration can move this to a Peripheral Control Center-specific directory without silently losing existing user data.
+
+## Roadmap
+
+1. Stabilize the current Windows application and its test/build workflow.
+2. Introduce a documented provider interface and normalized device model.
+3. Add diagnostics for detected Bluetooth and HID interfaces (VID/PID, usage page, usage, manufacturer, product, and provider result).
+4. Implement and physically validate an ARDOR GAMING provider for the user's device models.
+5. Add providers for more manufacturers and connection types.
+6. Expand monitoring beyond battery level where hardware and public protocols allow it.
+
+See [docs/architecture-and-roadmap.md](docs/architecture-and-roadmap.md) for the proposed provider architecture.
+
+## License
+
+No license has been selected yet. Until a license is added, the repository should be treated as all rights reserved; do not assume others have permission to redistribute or modify the code.

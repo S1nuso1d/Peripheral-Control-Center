@@ -1,10 +1,10 @@
 ; Установщик для Inno Setup 6 (https://jrsoftware.org/isinfo.php)
-; Сначала соберите exe:  build_exe.bat   ->  dist\BatteryTray.exe
-; Затем:                 iscc installer.iss   ->  installer_out\BatteryTray-Setup.exe
+; Сначала соберите exe:  build_exe.bat   ->  dist\PeripheralControlCenter.exe
+; Затем:                 iscc installer.iss   ->  installer_out\PeripheralControlCenter-Setup.exe
 
-#define AppName "Battery Tray"
-#define AppVersion "1.0.0"
-#define AppExe "BatteryTray.exe"
+#define AppName "Peripheral Control Center"
+#define AppVersion "0.1.0"
+#define AppExe "PeripheralControlCenter.exe"
 
 [Setup]
 AppId={{B7A1D2C4-5E3F-4A86-9C10-BA77E21D0001}
@@ -14,7 +14,7 @@ DefaultDirName={autopf}\{#AppName}
 DefaultGroupName={#AppName}
 DisableProgramGroupPage=yes
 OutputDir=installer_out
-OutputBaseFilename=BatteryTray-Setup
+OutputBaseFilename=PeripheralControlCenter-Setup
 Compression=lzma2
 SolidCompression=yes
 ArchitecturesInstallIn64BitMode=x64compatible

@@ -1,0 +1,35 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyd
+.Python
+.venv/
+venv/
+env/
+
+# Packaging and build output
+build/
+dist/
+*.spec
+installer_out/
+
+# Local application data and logs
+*.log
+*.db
+*.sqlite
+*.sqlite3
+
+# IDE / editor
+.idea/
+.vscode/
+*.code-workspace
+
+# Windows
+Thumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# Test / coverage caches
+.pytest_cache/
+.coverage
+htmlcov/

@@ -4,7 +4,7 @@ LANG = "ru"
 # ключ: (русский, английский)
 STR = {
     # общее
-    "loading": ("Battery Tray: загрузка…", "Battery Tray: loading…"),
+    "loading": ("Peripheral Control Center: загрузка…", "Peripheral Control Center: loading…"),
     "tray_none": ("Нет подключённых устройств с данными о заряде",
                   "No connected devices with battery data"),
     "no_devices_popup": ("Нет устройств с данными о заряде", "No devices with battery data"),
@@ -54,7 +54,6 @@ STR = {
     "m_language": ("Язык", "Language"),
     "lang_auto": ("Как в системе", "System default"),
     "m_autostart": ("Запускать с Windows", "Start with Windows"),
-    "m_diagnose": ("Диагностика устройств…", "Device diagnostics…"),
     "m_log": ("Открыть папку с логом", "Open log folder"),
     "m_quit": ("Выход", "Quit"),
     # окно настройки устройств

@@ -1,8 +1,8 @@
 @echo off
-rem Сборка BatteryTray.exe. Запускать на Windows в папке проекта.
+rem Build PeripheralControlCenter.exe. Run from the project directory on Windows.
 python -m pip install --upgrade -r requirements.txt pyinstaller
-python -m PyInstaller --noconsole --onefile --hidden-import diagnose --name BatteryTray battery_tray.py
+python -m PyInstaller --noconsole --onefile --name PeripheralControlCenter battery_tray.py
 echo.
-echo Готово: dist\BatteryTray.exe
-echo Установщик (нужен Inno Setup): iscc installer.iss
+echo Done: dist\PeripheralControlCenter.exe
+echo Installer (requires Inno Setup 6): iscc installer.iss
 pause

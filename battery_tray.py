@@ -1,4 +1,4 @@
-"""Battery Tray — заряд беспроводных устройств в трее Windows.
+"""Peripheral Control Center — мониторинг компьютерной периферии в Windows.
 
 Источники данных (провайдеры):
   * bluetooth — заряд, который Windows хранит для любых Bluetooth-устройств
@@ -819,7 +819,6 @@ class App:
                         self.set_language)
 
         self.check_item(m, "m_autostart", autostart_enabled(), self.safe_autostart)
-        m.addAction(tr("m_diagnose"), self.run_diagnostics)
         m.addAction(tr("m_log"), lambda: os.startfile(str(DATA_DIR)))
         m.addSeparator()
         m.addAction(tr("m_quit"), self.qt.quit)
@@ -893,16 +892,6 @@ class App:
     def set_interval(self, sec):
         self.settings.set("refresh_sec", sec)
         self.timer.setInterval(sec * 1000)
-
-    def run_diagnostics(self):
-        """Отчёт о том, что система видит у устройств (VID/PID, HID-интерфейсы, заряд Windows)."""
-        def work():
-            try:
-                import diagnose
-                os.startfile(str(diagnose.write_report(DATA_DIR)))
-            except Exception:
-                log.exception("diagnostics failed")
-        threading.Thread(target=work, daemon=True).start()
 
     def safe_autostart(self, on):
         try:
