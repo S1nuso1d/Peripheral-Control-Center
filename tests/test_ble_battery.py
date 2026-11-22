@@ -56,6 +56,24 @@ class FakeScanner:
 
 
 class BleBatteryTests(unittest.IsolatedAsyncioTestCase):
+    def test_reads_battery_level_status_from_advertisement_service_data(self):
+        advertisement = FakeAdvertisement([])
+        advertisement.service_data = {
+            "180F": bytes([0x02, 0x21, 0x00, 88]),
+        }
+        result = ble_battery.advertised_battery_status(advertisement)
+        self.assertEqual(result["battery"], 88)
+        self.assertTrue(result["charging"])
+
+    def test_ignores_advertisement_status_without_an_exact_level(self):
+        advertisement = FakeAdvertisement([])
+        power_state = 1 | (2 << 7)
+        advertisement.service_data = {
+            ble_battery.BATTERY_SERVICE_UUID:
+                bytes([0x00]) + power_state.to_bytes(2, "little"),
+        }
+        self.assertIsNone(ble_battery.advertised_battery_status(advertisement)["battery"])
+
     def test_parses_battery_level_status_with_charging(self):
         # Flags: Battery Level present. Power State: battery present + charging.
         result = ble_battery.parse_battery_level_status(bytes([0x02, 0x21, 0x00, 73]))
