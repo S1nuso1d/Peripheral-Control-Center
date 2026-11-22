@@ -46,7 +46,11 @@ class DeviceInventoryDialogTests(unittest.TestCase):
             "vendor_id": "25A7",
             "product_id": "FA7C",
             "vid_pid": "25A7:FA7C",
-            "battery": None,
+            "battery": 60,
+            "battery_source": "System.Devices.BatteryPlusCharging",
+            "battery_precision": "coarse",
+            "charging": True,
+            "charging_known": True,
             "kind": "device",
         }]
         dialog = DeviceInventoryDialog(
@@ -56,12 +60,18 @@ class DeviceInventoryDialogTests(unittest.TestCase):
 
         self.assertEqual(dialog.table.rowCount(), 1)
         self.assertEqual(dialog.windows_table.rowCount(), 1)
-        self.assertIn("ARDOR GAMING", dialog.report_text())
+        self.assertIn("System.Devices.BatteryPlusCharging", dialog.report_text())
+        self.assertIn("precision coarse", dialog.report_text())
+        self.assertIn("charging True", dialog.report_text())
         self.assertIn("25A7:FA7C", dialog.report_text())
         self.assertIn("PnP | ARDOR Receiver", dialog.report_text())
         self.assertIn("PnP candidates: 1", dialog.report_text())
         self.assertIn("candidate only (not merged): ARDOR Receiver", dialog.report_text())
         self.assertNotIn("serial_number", dialog.report_text().lower())
+        battery_cell = dialog.windows_table.item(0, 5)
+        self.assertEqual(battery_cell.text(), "≈60%")
+        charging_cell = dialog.windows_table.item(0, 7)
+        self.assertTrue(charging_cell.text())
         dialog.close()
 
 
