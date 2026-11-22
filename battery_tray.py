@@ -426,7 +426,7 @@ def level_color(level: int, light: bool = False) -> QColor:
     return QColor("#16a34a" if light else "#4ade80")
 
 
-def make_tray_icon(level) -> QIcon:
+def make_tray_icon(level, approximate: bool = False) -> QIcon:
     pm = QPixmap(64, 64)
     pm.fill(Qt.transparent)
     p = QPainter(pm)
@@ -443,10 +443,12 @@ def make_tray_icon(level) -> QIcon:
         p.drawText(QRectF(0, 0, 64, 64), Qt.AlignCenter, GLYPHS["device"])
     else:
         f = QFont("Segoe UI", weight=QFont.Bold)
-        f.setPixelSize(46 if level < 100 else 34)
+        f.setPixelSize((30 if level < 100 else 26) if approximate
+                       else (46 if level < 100 else 34))
         p.setFont(f)
         p.setPen(level_color(level))
-        p.drawText(QRectF(0, 0, 64, 64), Qt.AlignCenter, str(level))
+        text = f"≈{level}" if approximate else str(level)
+        p.drawText(QRectF(0, 0, 64, 64), Qt.AlignCenter, text)
     p.end()
     return QIcon(pm)
 
@@ -1128,7 +1130,10 @@ class App:
         self.popup.set_devices(vis)
         live = [d for d in vis if d["connected"]]
         if live:
-            self.tray.setIcon(make_tray_icon(min(d["battery"] for d in live)))
+            lowest = min(live, key=lambda device: device["battery"])
+            self.tray.setIcon(make_tray_icon(
+                lowest["battery"], lowest.get("battery_precision") == "coarse"
+            ))
             self.tray.setToolTip("\n".join(self.tooltip_line(d) for d in live))
         else:
             self.tray.setIcon(make_tray_icon(None))
@@ -1154,7 +1159,9 @@ class App:
                 icon.setContextMenu(self.menu)
                 icon.activated.connect(lambda reason, ic=icon: self.on_activated(reason, ic))
                 self.dev_trays[d["orig"]] = icon
-            icon.setIcon(make_tray_icon(d["battery"]))
+            icon.setIcon(make_tray_icon(
+                d["battery"], d.get("battery_precision") == "coarse"
+            ))
             icon.setToolTip(self.tooltip_line(d))
             if not icon.isVisible():
                 icon.show()
