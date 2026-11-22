@@ -130,7 +130,16 @@ def section_battery_providers(force: bool = False) -> list:
     except Exception as exc:
         lines.append(f'Standard HID Battery Strength: ошибка провайдера: {exc!r}')
 
-    if not app_status.get("hidpp"):
+    if force:
+        try:
+            import hidpp
+            devices = hidpp.read_devices()
+            lines.append(f'Logitech HID++: прочитано устройств: {len(devices)}')
+            for device in devices:
+                lines.append(f'  {device["name"]}: {device["battery"]}%')
+        except Exception as exc:
+            lines.append(f'Logitech HID++: ошибка провайдера: {exc!r}')
+    elif not app_status.get("hidpp"):
         lines.append("Logitech HID++: провайдер ещё не запускался в этом процессе")
 
     return lines or ["  (провайдеры не вернули результатов)"]
