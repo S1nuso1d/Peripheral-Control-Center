@@ -44,6 +44,24 @@ class HidBatteryTests(unittest.TestCase):
         cap.Range.UsageMax = 0x30
         self.assertTrue(hid_battery._cap_usage(cap))
 
+    def test_detects_battery_system_soc_and_capacity_usages(self):
+        cap = hid_battery.HIDP_VALUE_CAPS()
+        cap.UsagePage = 0x85
+        cap.IsRange = 0
+        cap.NotRange.Usage = 0x64
+        self.assertTrue(hid_battery._cap_usage(cap))
+        cap.NotRange.Usage = 0x66
+        self.assertTrue(hid_battery._cap_usage(cap))
+        cap.NotRange.Usage = 0x67
+        self.assertTrue(hid_battery._cap_usage(cap))
+
+    def test_capacity_ratio_uses_matching_units_and_rejects_bad_values(self):
+        self.assertEqual(hid_battery.capacity_to_percent(2500, 5000), 50)
+        self.assertEqual(hid_battery.capacity_to_percent(0, 5000), 0)
+        self.assertEqual(hid_battery.capacity_to_percent(5000, 5000), 100)
+        self.assertIsNone(hid_battery.capacity_to_percent(5001, 5000))
+        self.assertIsNone(hid_battery.capacity_to_percent(1, 0))
+
     @unittest.skipUnless(os.name == "nt", "Windows HID ABI layout only")
     def test_windows_native_structure_sizes(self):
         self.assertEqual(hid_battery.ctypes.sizeof(hid_battery.HIDP_CAPS), 64)
