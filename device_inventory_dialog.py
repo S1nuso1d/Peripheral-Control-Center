@@ -135,8 +135,11 @@ class DeviceInventoryDialog(QDialog):
             lambda device: (
                 device["name"], device["manufacturer"], device["vid_pid"],
                 device["device_class"], device["transport"],
-                f'{device["battery"]}%' if device["battery"] is not None else "—",
+                (f'≈{device["battery"]}%' if device.get("battery_precision") == "coarse"
+                 else f'{device["battery"]}%') if device["battery"] is not None else "—",
                 device.get("battery_source") or "—",
+                tr("charging") if device.get("charging_known") and device.get("charging")
+                else tr("not_charging") if device.get("charging_known") else "—",
                 device["status"],
             ),
         )
@@ -182,7 +185,9 @@ class DeviceInventoryDialog(QDialog):
                 f'PnP | {device["name"]} | {device["manufacturer"]} | '
                 f'{device["vid_pid"]} | {device["device_class"]} | '
                 f'{device["transport"]} | battery {battery} | '
+                f'precision {device.get("battery_precision", "reported")} | '
                 f'battery source {device.get("battery_source") or "unknown"} | '
+                f'charging {device.get("charging") if device.get("charging_known") else "unknown"} | '
                 f'status {device["status"]} | id {device["id"]}'
             )
         return "\n".join(lines)
