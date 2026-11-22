@@ -56,6 +56,44 @@ class FakeScanner:
 
 
 class BleBatteryTests(unittest.IsolatedAsyncioTestCase):
+    def test_parses_battery_level_status_with_charging(self):
+        # Flags: Battery Level present. Power State: battery present + charging.
+        result = ble_battery.parse_battery_level_status(bytes([0x02, 0x21, 0x00, 73]))
+        self.assertEqual(result["battery"], 73)
+        self.assertTrue(result["battery_present"])
+        self.assertTrue(result["charging"])
+        self.assertTrue(result["charging_known"])
+
+    def test_parses_optional_battery_level_status_fields_in_order(self):
+        # Identifier, Battery Level, Additional Status are optional and follow
+        # the two-byte Power State in the order declared by the flags.
+        result = ble_battery.parse_battery_level_status(
+            bytes([0x07, 0x41, 0x00, 1, 54, 0])
+        )
+        self.assertEqual(result["battery"], 54)
+        self.assertFalse(result["charging"])
+        self.assertTrue(result["charging_known"])
+
+    def test_does_not_guess_percent_from_qualitative_power_state(self):
+        # Battery present, charge level "low", but the percentage field is absent.
+        power_state = 1 | (2 << 7)
+        result = ble_battery.parse_battery_level_status(
+            bytes([0x00]) + power_state.to_bytes(2, "little")
+        )
+        self.assertIsNone(result["battery"])
+        self.assertIsNone(result["charging"])
+        self.assertFalse(result["charging_known"])
+
+    def test_rejects_invalid_or_truncated_battery_level_status(self):
+        self.assertIsNone(ble_battery.parse_battery_level_status(b""))
+        self.assertIsNone(ble_battery.parse_battery_level_status(bytes([0x02, 0x01])))
+        self.assertIsNone(
+            ble_battery.parse_battery_level_status(bytes([0x02, 0x01, 0x00, 101]))
+        )
+        self.assertIsNone(
+            ble_battery.parse_battery_level_status(bytes([0x08, 0x01, 0x00]))
+        )
+
     def test_short_and_full_service_uuids_normalize_identically(self):
         self.assertEqual(
             ble_battery._canonical_uuid("180F"),
