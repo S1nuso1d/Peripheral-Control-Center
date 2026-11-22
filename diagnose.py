@@ -33,7 +33,10 @@ def section_pnp() -> list:
 
     lines = []
     for device in devices:
-        battery = f'{device["battery"]}%' if device["battery"] is not None else "Windows не сообщает"
+        battery = (
+            f'≈{device["battery"]}%' if device.get("battery_precision") == "coarse"
+            else f'{device["battery"]}%'
+        ) if device["battery"] is not None else "Windows не сообщает"
         precision = ("категориальный уровень" if
                       device.get("battery_precision") == "coarse" else "процент/значение")
         charging = ("заряжается" if device.get("charging") else "не заряжается"
