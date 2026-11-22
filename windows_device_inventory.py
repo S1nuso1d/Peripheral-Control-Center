@@ -227,6 +227,10 @@ def normalize_pnp_devices(raw_devices: Any) -> list[dict]:
             charging_known = True
             battery_source = "System.Devices.BatteryPlusCharging"
             coarse = True
+        elif battery_source == "System.Devices.BatteryLife" and battery in (5, 18, 60, 95):
+            # These are the canonical representative values in Microsoft's
+            # documented BatteryLife enum bands, not necessarily exact SOC.
+            coarse = True
 
         normalized.append({
             "id": f"pnp:{fingerprint}",
