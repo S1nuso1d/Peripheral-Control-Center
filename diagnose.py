@@ -7,52 +7,14 @@
 и технические признаки интерфейсов.
 """
 import ctypes
-import json
 import os
 import platform
-import re
-import subprocess
 import sys
 import time
 from pathlib import Path
 
 from device_inventory import discover_hid_interfaces, hid_available
 from windows_device_inventory import discover_windows_devices
-
-PS_PNP = r"""
-$ErrorActionPreference = 'SilentlyContinue'
-[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
-$bat = '{104EA319-6EE2-4701-BD47-8DDBF425BBE5} 2'
-Get-PnpDevice -PresentOnly |
-  Where-Object { $_.InstanceId -match '^(USB|HID|BTHENUM|BTHLE|BTH)' } |
-  ForEach-Object {
-    $b = $null
-    if ($_.InstanceId -match '^(BTHENUM|BTHLE)\\DEV_') {
-      $p = Get-PnpDeviceProperty -InstanceId $_.InstanceId -KeyName $bat
-      if ($p -and $null -ne $p.Data) { $b = [int]$p.Data }
-    }
-    [pscustomobject]@{ status = $_.Status; cls = $_.Class; name = $_.FriendlyName
-                       id = $_.InstanceId; battery = $b }
-  } | ConvertTo-Json -Compress
-"""
-
-VID_PID = re.compile(r"VID_([0-9A-F]{4})&PID_([0-9A-F]{4})", re.I)
-
-
-def _mask(instance_id: str) -> str:
-    """Убираем серийник/Bluetooth-адрес из идентификатора."""
-    s = re.sub(r"DEV_([0-9A-F]{8})([0-9A-F]{4})", r"DEV_********\2", instance_id, flags=re.I)
-    parts = s.split("\\")
-    return "\\".join(parts[:2]) if len(parts) > 2 and not s.upper().startswith("BTH") else s
-
-
-def _powershell(script: str, timeout: int = 90) -> str:
-    out = subprocess.run(
-        ["powershell", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
-         "-Command", script],
-        capture_output=True, timeout=timeout, creationflags=0x08000000)
-    return out.stdout.decode("utf-8", errors="replace").strip()
-
 
 def section_system() -> list:
     return [f"Дата: {time.strftime('%Y-%m-%d %H:%M:%S')}",

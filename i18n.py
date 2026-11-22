@@ -36,7 +36,7 @@ STR = {
     "full_title": ("Заряжено", "Fully charged"),
     # меню
     "m_refresh": ("Обновить", "Refresh"),
-    "m_inventory": ("Обнаруженные HID-интерфейсы…", "Detected HID interfaces…"),
+    "m_inventory": ("Инвентаризация устройств…", "Device inventory…"),
     "m_diagnostics": ("Создать диагностический отчёт…", "Create diagnostics report…"),
     "diagnostics_error_title": ("Ошибка диагностики", "Diagnostics error"),
     "diagnostics_error_message": ("Не удалось создать отчёт. Подробности в логе.",
