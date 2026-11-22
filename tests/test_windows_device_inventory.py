@@ -68,6 +68,42 @@ class WindowsDeviceInventoryTests(unittest.TestCase):
         self.assertNotIn(r"USB\VID_1234", serialized)
         self.assertRegex(device["id"], r"^pnp:[0-9a-f]{12}$")
 
+    def test_prefers_combined_property_and_marks_charging_state_as_coarse(self):
+        rows = [{
+            "name": "Wireless mouse",
+            "status": "OK",
+            "deviceClass": "HIDClass",
+            "instanceId": r"HID\\VID_1234&PID_5678\\INSTANCE",
+            "battery": 82,
+            "batterySource": "System.Devices.BatteryLife",
+            "batteryPlusCharging": 150,
+        }]
+
+        device = normalize_pnp_devices(rows)[0]
+        self.assertEqual(device["battery"], 60)
+        self.assertEqual(device["battery_source"], "System.Devices.BatteryPlusCharging")
+        self.assertEqual(device["battery_precision"], "coarse")
+        self.assertTrue(device["charging"])
+        self.assertTrue(device["charging_known"])
+
+    def test_unknown_combined_status_falls_back_to_windows_battery_life(self):
+        rows = [{
+            "name": "Wireless headset",
+            "status": "OK",
+            "deviceClass": "Bluetooth",
+            "instanceId": r"BTHLE\\DEV_123456789ABC",
+            "battery": 74,
+            "batterySource": "System.Devices.BatteryLife",
+            "batteryPlusCharging": 201,
+        }]
+
+        device = normalize_pnp_devices(rows)[0]
+        self.assertEqual(device["battery"], 74)
+        self.assertEqual(device["battery_source"], "System.Devices.BatteryLife")
+        self.assertEqual(device["battery_precision"], "reported")
+        self.assertFalse(device["charging_known"])
+        self.assertIsNone(device["charging"])
+
     def test_normalizes_coarse_charging_source_without_claiming_exact_precision(self):
         rows = [{
             "name": "Wireless keyboard",
