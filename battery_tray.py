@@ -311,34 +311,37 @@ def provider_windows_pnp() -> list:
         if _windows_battery_cache_at and now - _windows_battery_cache_at < 120:
             return [dict(device) for device in _windows_battery_cache]
 
-        devices = discover_windows_devices()
-        out = []
-        for device in devices:
-            if device.get("battery") is None or not device.get("connected"):
-                continue
-            kind = device.get("kind") or guess_kind(device["name"])
-            item = {
-                "id": device["id"],
-                "name": device["name"],
-                "battery": device["battery"],
-                "connected": True,
-                "kind": kind,
-                "source": "windows_pnp",
-                "battery_source": device.get("battery_source"),
-                "battery_precision": device.get("battery_precision", "reported"),
-            }
-            if device.get("charging_known"):
-                item["charging"] = bool(device.get("charging"))
-                item["charging_known"] = True
-            if device.get("battery_precision") == "coarse":
-                item["label"] = {
-                    5: tr("lvl_critical"),
-                    18: tr("lvl_low"),
-                    60: tr("lvl_medium"),
-                    95: tr("lvl_full"),
-                }.get(device["battery"], tr("lvl_medium"))
-            out.append(item)
+    # Do not hold the cache lock during PowerShell / PnP enumeration: a manual
+    # refresh from the GUI must never wait for this potentially slow operation.
+    devices = discover_windows_devices()
+    out = []
+    for device in devices:
+        if device.get("battery") is None or not device.get("connected"):
+            continue
+        kind = device.get("kind") or guess_kind(device["name"])
+        item = {
+            "id": device["id"],
+            "name": device["name"],
+            "battery": device["battery"],
+            "connected": True,
+            "kind": kind,
+            "source": "windows_pnp",
+            "battery_source": device.get("battery_source"),
+            "battery_precision": device.get("battery_precision", "reported"),
+        }
+        if device.get("charging_known"):
+            item["charging"] = bool(device.get("charging"))
+            item["charging_known"] = True
+        if device.get("battery_precision") == "coarse":
+            item["label"] = {
+                5: tr("lvl_critical"),
+                18: tr("lvl_low"),
+                60: tr("lvl_medium"),
+                95: tr("lvl_full"),
+            }.get(device["battery"], tr("lvl_medium"))
+        out.append(item)
 
+    with _windows_battery_cache_lock:
         _windows_battery_cache = out
         _windows_battery_cache_at = time.monotonic()
         return [dict(device) for device in _windows_battery_cache]
