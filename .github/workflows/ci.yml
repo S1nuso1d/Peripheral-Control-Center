@@ -11,10 +11,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Create source archive
-        run: |
-          zip -r PeripheralControlCenter-source.zip . \
-            -x ".git/*" ".venv/*" "*/__pycache__/*" "__pycache__/*" \
-               "dist/*" "build/*" "PeripheralControlCenter-source.zip"
+        run: git archive --format=zip --output=PeripheralControlCenter-source.zip HEAD
       - uses: actions/upload-artifact@v4
         with:
           name: PeripheralControlCenter-source
