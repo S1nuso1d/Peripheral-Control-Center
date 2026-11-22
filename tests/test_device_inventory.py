@@ -99,6 +99,22 @@ class DeviceInventoryTests(unittest.TestCase):
     def test_empty_enumeration_returns_empty_list(self):
         self.assertEqual(discover_hid_interfaces(FakeHid([])), [])
 
+    def test_standard_hid_battery_strength_usage_is_recognized(self):
+        fake = FakeHid([{
+            "vendor_id": 0x1234,
+            "product_id": 0x5678,
+            "interface_number": 0,
+            "usage_page": 0x06,
+            "usage": 0x20,
+            "manufacturer_string": "Example",
+            "product_string": "Battery keyboard",
+            "path": b"battery-path",
+        }])
+
+        device = discover_hid_interfaces(fake)[0]
+        self.assertTrue(device["battery_related_page"])
+        self.assertIn("Battery Strength", device["protocol_hint"])
+
     def test_battery_and_power_usage_page_names(self):
         self.assertEqual(usage_page_name(0x85), "Battery System")
         self.assertEqual(usage_page_name(0x84), "Power Device")
