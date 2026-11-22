@@ -68,7 +68,7 @@ def section_battery_providers(force: bool = False) -> list:
     lines = []
     app_module = sys.modules.get("battery_tray")
     app_status = getattr(app_module, "PROVIDER_STATUS", {}) if app_module else {}
-    for name in ("bluetooth", "ble_gatt", "hid_battery", "xinput", "hidpp"):
+    for name in ("bluetooth", "ble_gatt", "hid_battery", "windows_pnp", "xinput", "hidpp"):
         current = app_status.get(name)
         if current:
             lines.append(
