@@ -24,6 +24,7 @@ log = logging.getLogger("BatteryTray.ble")
 
 BATTERY_SERVICE_UUID = "0000180f-0000-1000-8000-00805f9b34fb"
 BATTERY_LEVEL_UUID = "00002a19-0000-1000-8000-00805f9b34fb"
+BATTERY_LEVEL_STATUS_UUID = "00002bed-0000-1000-8000-00805f9b34fb"
 SCAN_SECONDS = 4.0
 CONNECT_TIMEOUT = 3.5
 MAX_CANDIDATES = 4
@@ -76,6 +77,58 @@ def _canonical_uuid(value: Any) -> str:
         return str(uuid.UUID(raw)).lower()
     except (ValueError, TypeError, AttributeError):
         return raw
+
+
+def parse_battery_level_status(raw: bytes | bytearray) -> dict[str, Any] | None:
+    """Decode the standard Battery Level Status characteristic (UUID 0x2BED).
+
+    Layout: Flags (1 byte), Power State (2 little-endian bytes), then the
+    optional Identifier, Battery Level and Additional Status fields in that
+    order when their corresponding flag bits are set.
+    """
+    data = bytes(raw or b"")
+    if len(data) < 3:
+        return None
+
+    flags = data[0]
+    if flags & 0xF8:  # reserved flag bits must be zero
+        return None
+
+    power_state = int.from_bytes(data[1:3], "little")
+    battery_present = bool(power_state & 0x01)
+    charge_state = (power_state >> 5) & 0x03
+    offset = 3
+
+    if flags & 0x01:  # Identifier Present
+        if len(data) < offset + 1:
+            return None
+        offset += 1
+
+    battery_level = None
+    if flags & 0x02:  # Battery Level Present
+        if len(data) < offset + 1:
+            return None
+        candidate = data[offset]
+        offset += 1
+        if not 0 <= candidate <= 100:
+            return None
+        battery_level = candidate
+
+    if flags & 0x04:  # Additional Status Present
+        if len(data) < offset + 1:
+            return None
+        offset += 1
+
+    # Do not invent a percentage from the qualitative Good/Low/Critical bits.
+    if not battery_present:
+        battery_level = 0 if flags & 0x02 else None
+
+    return {
+        "battery": battery_level,
+        "battery_present": battery_present,
+        "charging": charge_state == 1 if charge_state != 0 else None,
+        "charging_known": charge_state != 0,
+    }
 
 
 def _kind_from_name(name: str) -> str:
@@ -146,33 +199,61 @@ async def _scan_and_read() -> tuple[list[dict], dict]:
                 for service in client.services:
                     if _canonical_uuid(service.uuid) != BATTERY_SERVICE_UUID:
                         continue
+                    level = None
+                    level_source = None
+                    charging = None
+                    charging_known = False
+
                     characteristic = service.get_characteristic(BATTERY_LEVEL_UUID)
-                    if characteristic is None:
-                        service_index += 1
-                        continue
-                    raw = bytes(await client.read_gatt_char(characteristic))
-                    if not raw:
-                        errors.append(f"{name}: empty Battery Level value")
-                        service_index += 1
-                        continue
-                    level = raw[0]
-                    if not 0 <= level <= 100:
-                        errors.append(f"{name}: invalid Battery Level value {level}")
-                        service_index += 1
-                        continue
-                    results.append({
-                        "id": _stable_id(address, service_index),
-                        "name": name,
-                        "battery": level,
-                        "connected": True,
-                        "kind": _kind_from_name(name),
-                        "source": "ble_gatt",
-                        "charging": None,
-                        "metadata": {
-                            "service_uuid": BATTERY_SERVICE_UUID,
-                            "characteristic_uuid": BATTERY_LEVEL_UUID,
-                        },
-                    })
+                    if characteristic is not None:
+                        try:
+                            raw = bytes(await client.read_gatt_char(characteristic))
+                            if raw and 0 <= raw[0] <= 100:
+                                level = raw[0]
+                                level_source = BATTERY_LEVEL_UUID
+                            else:
+                                errors.append(f"{name}: invalid or empty Battery Level value")
+                        except Exception as exc:
+                            errors.append(f"{name}: Battery Level read failed: {_safe_error(exc)}")
+
+                    status_characteristic = service.get_characteristic(
+                        BATTERY_LEVEL_STATUS_UUID
+                    )
+                    if status_characteristic is not None:
+                        try:
+                            status_raw = await client.read_gatt_char(status_characteristic)
+                            status = parse_battery_level_status(status_raw)
+                            if status is None:
+                                errors.append(f"{name}: invalid Battery Level Status value")
+                            else:
+                                if level is None and status["battery"] is not None:
+                                    level = status["battery"]
+                                    level_source = BATTERY_LEVEL_STATUS_UUID
+                                if status["charging_known"]:
+                                    charging = status["charging"]
+                                    charging_known = True
+                        except Exception as exc:
+                            errors.append(
+                                f"{name}: Battery Level Status read failed: {_safe_error(exc)}"
+                            )
+
+                    if level is not None:
+                        item = {
+                            "id": _stable_id(address, service_index),
+                            "name": name,
+                            "battery": level,
+                            "connected": True,
+                            "kind": _kind_from_name(name),
+                            "source": "ble_gatt",
+                            "metadata": {
+                                "service_uuid": BATTERY_SERVICE_UUID,
+                                "characteristic_uuid": level_source,
+                            },
+                        }
+                        if charging_known:
+                            item["charging"] = charging
+                            item["charging_known"] = True
+                        results.append(item)
                     service_index += 1
         except Exception as exc:
             # A service UUID in advertising is only a candidate; it does not
