@@ -1,11 +1,13 @@
 """Generic Windows HID Battery Strength provider (read-only).
 
-Uses the standard HID Generic Device Controls usage 0x06/0x20 ("Battery
-Strength"). It inspects report capabilities and requests only existing input
-or feature reports. It never sends output reports or SET_FEATURE commands.
+Reads standard HID battery values without vendor-specific commands:
+- Generic Device Controls 0x06/0x20 (Battery Strength);
+- Battery System 0x85/0x64 and 0x65 (relative/absolute state of charge);
+- Battery System 0x85/0x66 and 0x67 (remaining/full capacity ratio).
 
-A device is reported only when Windows' HID parser exposes Battery Strength
-and a current report can be read and scaled using that report's logical range.
+It inspects report capabilities and requests only existing input or feature
+reports. It never sends output reports or SET_FEATURE commands. Unknown or
+inconsistent values are rejected rather than guessed.
 """
 from __future__ import annotations
 
@@ -24,6 +26,11 @@ log = logging.getLogger("BatteryTray.hid_battery")
 
 HID_USAGE_PAGE_GENERIC_DEVICE = 0x06
 HID_USAGE_BATTERY_STRENGTH = 0x20
+HID_USAGE_PAGE_BATTERY_SYSTEM = 0x85
+HID_USAGE_RELATIVE_STATE_OF_CHARGE = 0x64
+HID_USAGE_ABSOLUTE_STATE_OF_CHARGE = 0x65
+HID_USAGE_REMAINING_CAPACITY = 0x66
+HID_USAGE_FULL_CHARGE_CAPACITY = 0x67
 HIDP_STATUS_SUCCESS = 0x00110000
 HIDP_INPUT = 0
 HIDP_FEATURE = 2
@@ -187,19 +194,51 @@ def scale_battery_strength(value: int, logical_min: int, logical_max: int) -> in
     return max(0, min(100, percent))
 
 
-def _cap_usage(cap: HIDP_VALUE_CAPS) -> bool:
-    if cap.UsagePage != HID_USAGE_PAGE_GENERIC_DEVICE:
-        return False
+def _cap_target_usage(cap: HIDP_VALUE_CAPS) -> int | None:
+    """Return the known battery usage represented by a value capability."""
+    if cap.UsagePage == HID_USAGE_PAGE_GENERIC_DEVICE:
+        targets = (HID_USAGE_BATTERY_STRENGTH,)
+    elif cap.UsagePage == HID_USAGE_PAGE_BATTERY_SYSTEM:
+        targets = (
+            HID_USAGE_RELATIVE_STATE_OF_CHARGE,
+            HID_USAGE_ABSOLUTE_STATE_OF_CHARGE,
+            HID_USAGE_REMAINING_CAPACITY,
+            HID_USAGE_FULL_CHARGE_CAPACITY,
+        )
+    else:
+        return None
+
     if cap.IsRange:
-        return cap.UsageMin <= HID_USAGE_BATTERY_STRENGTH <= cap.UsageMax
-    return cap.NotRange.Usage == HID_USAGE_BATTERY_STRENGTH
+        for usage in targets:
+            if cap.UsageMin <= usage <= cap.UsageMax:
+                return usage
+        return None
+
+    usage = int(cap.NotRange.Usage)
+    return usage if usage in targets else None
 
 
-def _read_report_value(api, handle, preparsed, report_type: int, cap, report_length: int):
+def _cap_usage(cap: HIDP_VALUE_CAPS) -> bool:
+    return _cap_target_usage(cap) is not None
+
+
+def capacity_to_percent(remaining: int, full: int) -> int | None:
+    """Calculate SOC from two HID capacity readings expressed in the same units."""
+    try:
+        remaining, full = int(remaining), int(full)
+    except (TypeError, ValueError, OverflowError):
+        return None
+    if full <= 0 or remaining < 0 or remaining > full:
+        return None
+    return max(0, min(100, round(remaining * 100 / full)))
+
+
+def _read_report_buffer(api, handle, report_type: int, report_id: int,
+                        report_length: int):
     if report_length <= 0:
         return None
     report = (ctypes.c_ubyte * report_length)()
-    report[0] = cap.ReportID
+    report[0] = report_id
 
     if report_type == HIDP_FEATURE:
         ok = api["hid"].HidD_GetFeature(handle, report, report_length)
@@ -207,15 +246,17 @@ def _read_report_value(api, handle, preparsed, report_type: int, cap, report_len
         # Microsoft documents this as a one-shot snapshot operation, not a
         # streaming mechanism. That is appropriate for occasional battery reads.
         ok = api["hid"].HidD_GetInputReport(handle, report, report_length)
-    if not ok:
-        return None
+    return report if ok else None
 
+
+def _read_usage_value(api, preparsed, report_type: int, report, report_length: int,
+                      cap, usage: int) -> int | None:
     raw_value = ctypes.c_ulong(0)
     status = api["hid"].HidP_GetUsageValue(
         report_type,
-        HID_USAGE_PAGE_GENERIC_DEVICE,
+        cap.UsagePage,
         cap.LinkCollection,
-        HID_USAGE_BATTERY_STRENGTH,
+        usage,
         ctypes.byref(raw_value),
         preparsed,
         ctypes.cast(report, ctypes.c_void_p),
@@ -223,7 +264,115 @@ def _read_report_value(api, handle, preparsed, report_type: int, cap, report_len
     )
     if status != HIDP_STATUS_SUCCESS:
         return None
-    return scale_battery_strength(raw_value.value, cap.LogicalMin, cap.LogicalMax)
+    value = int(raw_value.value)
+    if value < cap.LogicalMin or value > cap.LogicalMax:
+        return None
+    return value
+
+
+def _read_interface(info: dict, api) -> int | None:
+    path = _path_to_windows_text(info.get("path"))
+    handle = api["kernel32"].CreateFileW(
+        path, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE,
+        None, OPEN_EXISTING, 0, None,
+    )
+    if not handle or handle == INVALID_HANDLE_VALUE:
+        return None
+
+    preparsed = ctypes.c_void_p()
+    try:
+        if not api["hid"].HidD_GetPreparsedData(handle, ctypes.byref(preparsed)):
+            return None
+        try:
+            caps = HIDP_CAPS()
+            if api["hid"].HidP_GetCaps(preparsed, ctypes.byref(caps)) != HIDP_STATUS_SUCCESS:
+                return None
+
+            report_types = (
+                (HIDP_FEATURE, caps.NumberFeatureValueCaps, caps.FeatureReportByteLength),
+                (HIDP_INPUT, caps.NumberInputValueCaps, caps.InputReportByteLength),
+            )
+            for report_type, count, report_length in report_types:
+                if not count or not report_length:
+                    continue
+                value_caps = (HIDP_VALUE_CAPS * count)()
+                actual_count = ctypes.c_ushort(count)
+                status = api["hid"].HidP_GetValueCaps(
+                    report_type, value_caps, ctypes.byref(actual_count), preparsed
+                )
+                if status != HIDP_STATUS_SUCCESS:
+                    continue
+
+                battery_caps = []
+                for cap in value_caps[:actual_count.value]:
+                    usage = _cap_target_usage(cap)
+                    if usage is not None:
+                        battery_caps.append((cap, usage))
+
+                # Direct percent usages take precedence over computed capacity ratios.
+                for cap, usage in battery_caps:
+                    if not (
+                        (cap.UsagePage == HID_USAGE_PAGE_GENERIC_DEVICE
+                         and usage == HID_USAGE_BATTERY_STRENGTH)
+                        or
+                        (cap.UsagePage == HID_USAGE_PAGE_BATTERY_SYSTEM
+                         and usage in (HID_USAGE_RELATIVE_STATE_OF_CHARGE,
+                                       HID_USAGE_ABSOLUTE_STATE_OF_CHARGE))
+                    ):
+                        continue
+                    report = _read_report_buffer(api, handle, report_type,
+                                                 cap.ReportID, report_length)
+                    if report is None:
+                        continue
+                    raw = _read_usage_value(api, preparsed, report_type, report,
+                                            report_length, cap, usage)
+                    if raw is None:
+                        continue
+                    percent = scale_battery_strength(raw, cap.LogicalMin, cap.LogicalMax)
+                    if percent is not None:
+                        return percent
+
+                # Some Smart Battery HID devices expose capacity values instead
+                # of a percentage. Pair them only when they share one report and
+                # one link collection, so the ratio refers to the same battery.
+                by_report = {}
+                for cap, usage in battery_caps:
+                    if cap.UsagePage != HID_USAGE_PAGE_BATTERY_SYSTEM:
+                        continue
+                    if usage not in (HID_USAGE_REMAINING_CAPACITY,
+                                     HID_USAGE_FULL_CHARGE_CAPACITY):
+                        continue
+                    key = (cap.ReportID, cap.LinkCollection)
+                    by_report.setdefault(key, {})[usage] = cap
+
+                for (report_id, _link), pair in by_report.items():
+                    remaining_cap = pair.get(HID_USAGE_REMAINING_CAPACITY)
+                    full_cap = pair.get(HID_USAGE_FULL_CHARGE_CAPACITY)
+                    if remaining_cap is None or full_cap is None:
+                        continue
+                    report = _read_report_buffer(api, handle, report_type,
+                                                 report_id, report_length)
+                    if report is None:
+                        continue
+                    remaining = _read_usage_value(
+                        api, preparsed, report_type, report, report_length,
+                        remaining_cap, HID_USAGE_REMAINING_CAPACITY,
+                    )
+                    full = _read_usage_value(
+                        api, preparsed, report_type, report, report_length,
+                        full_cap, HID_USAGE_FULL_CHARGE_CAPACITY,
+                    )
+                    percent = capacity_to_percent(remaining, full) if (
+                        remaining is not None and full is not None
+                    ) else None
+                    if percent is not None:
+                        return percent
+            return None
+        finally:
+            if preparsed:
+                api["hid"].HidD_FreePreparsedData(preparsed)
+    finally:
+        api["kernel32"].CloseHandle(handle)
 
 
 def _path_to_windows_text(path: Any) -> str:
