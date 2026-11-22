@@ -17,7 +17,7 @@ Peripheral Control Center brings battery information from supported wireless dev
 - Copyable HID inventory report without raw HID paths or serial numbers.
 - Full Windows / Bluetooth / HID diagnostics report accessible from the tray menu, including provider outcomes and read errors.
 - Windows PnP battery properties, including `System.Devices.BatteryLife` and `System.Devices.BatteryPlusCharging` when published. Windows' categorical values are shown as approximate bands, not exact percentages.
-- Bluetooth LE Battery Service (0x180F) reads of Battery Level (0x2A19), through Bleak; scans only devices advertising that service.
+- Bluetooth LE Battery Service (0x180F) reads of Battery Level (0x2A19) and Battery Level Status (0x2BED), including charging state; can also consume Battery Level Status broadcast in service data without connecting. Scans only devices advertising that service.
 - Standard HID battery readings: Generic Device Controls / Battery Strength (0x06/0x20), Battery System state-of-charge fields (0x85/0x64–0x65), and remaining/full capacity ratio (0x85/0x66–0x67).
 - Battery history and an approximate remaining-time estimate based on collected history.
 - Separate data providers for the currently implemented sources:
