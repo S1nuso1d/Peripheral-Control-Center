@@ -194,8 +194,8 @@ def scale_battery_strength(value: int, logical_min: int, logical_max: int) -> in
     return max(0, min(100, percent))
 
 
-def _cap_target_usage(cap: HIDP_VALUE_CAPS) -> int | None:
-    """Return the known battery usage represented by a value capability."""
+def _cap_target_usages(cap: HIDP_VALUE_CAPS) -> tuple[int, ...]:
+    """Return all known battery usages represented by one value capability."""
     if cap.UsagePage == HID_USAGE_PAGE_GENERIC_DEVICE:
         targets = (HID_USAGE_BATTERY_STRENGTH,)
     elif cap.UsagePage == HID_USAGE_PAGE_BATTERY_SYSTEM:
@@ -206,20 +206,23 @@ def _cap_target_usage(cap: HIDP_VALUE_CAPS) -> int | None:
             HID_USAGE_FULL_CHARGE_CAPACITY,
         )
     else:
-        return None
+        return ()
 
     if cap.IsRange:
-        for usage in targets:
-            if cap.UsageMin <= usage <= cap.UsageMax:
-                return usage
-        return None
+        return tuple(usage for usage in targets
+                     if cap.UsageMin <= usage <= cap.UsageMax)
 
     usage = int(cap.NotRange.Usage)
-    return usage if usage in targets else None
+    return (usage,) if usage in targets else ()
+
+
+def _cap_target_usage(cap: HIDP_VALUE_CAPS) -> int | None:
+    usages = _cap_target_usages(cap)
+    return usages[0] if usages else None
 
 
 def _cap_usage(cap: HIDP_VALUE_CAPS) -> bool:
-    return _cap_target_usage(cap) is not None
+    return bool(_cap_target_usages(cap))
 
 
 def capacity_to_percent(remaining: int, full: int) -> int | None:
@@ -305,8 +308,7 @@ def _read_interface(info: dict, api) -> int | None:
 
                 battery_caps = []
                 for cap in value_caps[:actual_count.value]:
-                    usage = _cap_target_usage(cap)
-                    if usage is not None:
+                    for usage in _cap_target_usages(cap):
                         battery_caps.append((cap, usage))
 
                 # Direct percent usages take precedence over computed capacity ratios.
