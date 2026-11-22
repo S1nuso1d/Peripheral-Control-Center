@@ -98,7 +98,10 @@ def usage_page_name(page: int) -> str:
     return "Other / unknown"
 
 
-def _protocol_hint(page: int) -> str:
+def _protocol_hint(page: int, usage: int = 0) -> str:
+    # Battery Strength is Generic Device Controls page 0x06, usage 0x20.
+    if page == 0x06 and usage == 0x20:
+        return "Standard HID Battery Strength usage; attempting read-only report parsing"
     if page == 0x85:
         return "Battery System HID page; device-specific parsing required"
     if page == 0x84:
@@ -158,8 +161,9 @@ def discover_hid_interfaces(hid_module=None) -> list[dict]:
             "transport": _transport(info, raw_path),
             "path_fingerprint": fingerprint,
             "vendor_defined": 0xFF00 <= usage_page <= 0xFFFF,
-            "battery_related_page": usage_page in (0x84, 0x85),
-            "protocol_hint": _protocol_hint(usage_page),
+            "battery_related_page": usage_page in (0x84, 0x85) or
+                                    (usage_page == 0x06 and usage == 0x20),
+            "protocol_hint": _protocol_hint(usage_page, usage),
         })
 
     devices.sort(key=lambda item: (
