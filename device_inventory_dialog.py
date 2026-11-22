@@ -1,4 +1,4 @@
-"""Dialog that lists every HID interface, including devices without battery data."""
+"""Read-only HID and Windows PnP inventory window."""
 from __future__ import annotations
 
 from PySide6.QtCore import Qt
@@ -9,19 +9,22 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QPushButton,
+    QTabWidget,
     QTableWidget,
     QTableWidgetItem,
     QVBoxLayout,
+    QWidget,
 )
 
 from device_inventory import discover_hid_interfaces
 from i18n import tr
+from windows_device_inventory import discover_windows_devices
 
 
 class DeviceInventoryDialog(QDialog):
-    """Read-only inventory of HID interfaces visible to hidapi."""
+    """Show HID interfaces and Windows PnP nodes without issuing device commands."""
 
-    COLUMNS = (
+    HID_COLUMNS = (
         "inventory_device",
         "inventory_manufacturer",
         "inventory_vid_pid",
@@ -31,35 +34,53 @@ class DeviceInventoryDialog(QDialog):
         "inventory_transport",
         "inventory_protocol",
     )
+    WINDOWS_COLUMNS = (
+        "inventory_device",
+        "inventory_manufacturer",
+        "inventory_vid_pid",
+        "inventory_class",
+        "inventory_transport",
+        "inventory_battery",
+        "inventory_status",
+    )
 
-    def __init__(self, parent=None, discover_fn=None):
+    def __init__(self, parent=None, discover_fn=None, discover_windows_fn=None):
         super().__init__(parent)
         self._discover = discover_fn or discover_hid_interfaces
+        self._discover_windows = discover_windows_fn or discover_windows_devices
         self._devices = []
+        self._windows_devices = []
 
         self.setWindowTitle(tr("inventory_title"))
-        self.resize(1120, 520)
+        self.resize(1240, 600)
 
         layout = QVBoxLayout(self)
+        self.tabs = QTabWidget()
+        layout.addWidget(self.tabs)
+
+        hid_page = QWidget()
+        hid_layout = QVBoxLayout(hid_page)
         self.summary = QLabel()
         self.summary.setWordWrap(True)
-        layout.addWidget(self.summary)
+        hid_layout.addWidget(self.summary)
+        self.table = self._make_table(self.HID_COLUMNS)
+        hid_layout.addWidget(self.table)
+        self.hid_hint = QLabel(tr("inventory_hint"))
+        self.hid_hint.setWordWrap(True)
+        hid_layout.addWidget(self.hid_hint)
+        self.tabs.addTab(hid_page, tr("inventory_tab_hid"))
 
-        self.table = QTableWidget(0, len(self.COLUMNS))
-        self.table.setHorizontalHeaderLabels([tr(key) for key in self.COLUMNS])
-        self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
-        self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
-        self.table.setSelectionMode(QAbstractItemView.SingleSelection)
-        self.table.setAlternatingRowColors(True)
-        self.table.setSortingEnabled(False)
-        self.table.verticalHeader().setVisible(False)
-        self.table.horizontalHeader().setStretchLastSection(True)
-        self.table.horizontalHeader().setMinimumSectionSize(82)
-        layout.addWidget(self.table)
-
-        hint = QLabel(tr("inventory_hint"))
-        hint.setWordWrap(True)
-        layout.addWidget(hint)
+        windows_page = QWidget()
+        windows_layout = QVBoxLayout(windows_page)
+        self.windows_summary = QLabel()
+        self.windows_summary.setWordWrap(True)
+        windows_layout.addWidget(self.windows_summary)
+        self.windows_table = self._make_table(self.WINDOWS_COLUMNS)
+        windows_layout.addWidget(self.windows_table)
+        self.windows_hint = QLabel(tr("windows_inventory_hint"))
+        self.windows_hint.setWordWrap(True)
+        windows_layout.addWidget(self.windows_hint)
+        self.tabs.addTab(windows_page, tr("inventory_tab_windows"))
 
         buttons = QHBoxLayout()
         self.refresh_button = QPushButton(tr("inventory_refresh"))
@@ -76,53 +97,113 @@ class DeviceInventoryDialog(QDialog):
 
         self.refresh()
 
+    @staticmethod
+    def _make_table(columns):
+        table = QTableWidget(0, len(columns))
+        table.setHorizontalHeaderLabels([tr(key) for key in columns])
+        table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        table.setSelectionBehavior(QAbstractItemView.SelectRows)
+        table.setSelectionMode(QAbstractItemView.SingleSelection)
+        table.setAlternatingRowColors(True)
+        table.setSortingEnabled(False)
+        table.verticalHeader().setVisible(False)
+        table.horizontalHeader().setStretchLastSection(True)
+        table.horizontalHeader().setMinimumSectionSize(82)
+        return table
+
+    @staticmethod
+    def _fill_table(table, devices, values_fn):
+        table.setRowCount(len(devices))
+        for row, device in enumerate(devices):
+            for column, value in enumerate(values_fn(device)):
+                item = QTableWidgetItem(str(value))
+                item.setData(Qt.UserRole, device["id"])
+                table.setItem(row, column, item)
+        table.resizeColumnsToContents()
+
     def refresh(self):
+        hid_error = None
+        windows_error = None
         try:
-            devices = self._discover()
+            self._devices = list(self._discover())
         except Exception as exc:
             self._devices = []
-            self.table.setRowCount(0)
-            self.summary.setText(tr("inventory_error", str(exc)))
-            return
+            hid_error = str(exc)
+        try:
+            self._windows_devices = list(self._discover_windows())
+        except Exception as exc:
+            self._windows_devices = []
+            windows_error = str(exc)
 
-        self._devices = list(devices)
-        self.table.setRowCount(len(self._devices))
-        for row, device in enumerate(self._devices):
-            values = (
+        self._fill_table(
+            self.table,
+            self._devices,
+            lambda device: (
                 device["product"],
                 device["manufacturer"],
                 f'{device["vendor_id"]:04X}:{device["product_id"]:04X}',
-                str(device["interface_number"]),
+                device["interface_number"],
                 f'0x{device["usage_page"]:04X} · {device["usage_page_name"]}',
                 f'0x{device["usage"]:04X}',
                 device["transport"],
                 device["protocol_hint"],
-            )
-            for column, value in enumerate(values):
-                item = QTableWidgetItem(value)
-                item.setData(Qt.UserRole, device["id"])
-                self.table.setItem(row, column, item)
-
-        count = len(self._devices)
-        self.summary.setText(
-            tr("inventory_count", count) if count else tr("inventory_empty")
+            ),
         )
-        self.table.resizeColumnsToContents()
+        self._fill_table(
+            self.windows_table,
+            self._windows_devices,
+            lambda device: (
+                device["name"],
+                device["manufacturer"],
+                device["vid_pid"],
+                device["device_class"],
+                device["transport"],
+                f'{device["battery"]}%' if device["battery"] is not None else "—",
+                device["status"],
+            ),
+        )
+
+        hid_count = len(self._devices)
+        windows_count = len(self._windows_devices)
+        self.summary.setText(
+            tr("inventory_error", hid_error) if hid_error else
+            tr("inventory_count", hid_count) if hid_count else tr("inventory_empty")
+        )
+        self.windows_summary.setText(
+            tr("windows_inventory_error", windows_error) if windows_error else
+            tr("windows_inventory_count", windows_count) if windows_count else
+            tr("windows_inventory_empty")
+        )
 
     def report_text(self) -> str:
-        """Return a copyable report without raw HID paths or serial numbers."""
-        lines = [tr("inventory_report_title"), tr("inventory_count", len(self._devices)), ""]
+        """Return both inventories without raw HID/PnP instance paths or serial numbers."""
+        lines = [
+            tr("inventory_report_title"),
+            tr("inventory_count", len(self._devices)),
+            "",
+        ]
         for device in self._devices:
             lines.append(
-                f'{device["product"]} | {device["manufacturer"]} | '
+                f'HID | {device["product"]} | {device["manufacturer"]} | '
                 f'{device["vendor_id"]:04X}:{device["product_id"]:04X} | '
                 f'interface {device["interface_number"]} | '
                 f'usage page 0x{device["usage_page"]:04X} | '
                 f'usage 0x{device["usage"]:04X} | {device["transport"]} | '
                 f'{device["protocol_hint"]} | id {device["id"]}'
             )
+
+        lines.extend(["", tr("windows_inventory_count", len(self._windows_devices))])
+        for device in self._windows_devices:
+            battery = f'{device["battery"]}%' if device["battery"] is not None else "unknown"
+            lines.append(
+                f'PnP | {device["name"]} | {device["manufacturer"]} | '
+                f'{device["vid_pid"]} | {device["device_class"]} | '
+                f'{device["transport"]} | battery {battery} | '
+                f'status {device["status"]} | id {device["id"]}'
+            )
         return "\n".join(lines)
 
     def copy_report(self):
         QApplication.clipboard().setText(self.report_text())
-        self.summary.setText(tr("inventory_copied"))
+        active_summary = self.windows_summary if self.tabs.currentIndex() == 1 else self.summary
+        active_summary.setText(tr("inventory_copied"))

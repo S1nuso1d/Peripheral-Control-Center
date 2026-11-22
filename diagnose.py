@@ -17,6 +17,7 @@ import time
 from pathlib import Path
 
 from device_inventory import discover_hid_interfaces, hid_available
+from windows_device_inventory import discover_windows_devices
 
 PS_PNP = r"""
 $ErrorActionPreference = 'SilentlyContinue'
@@ -60,36 +61,22 @@ def section_system() -> list:
 
 
 def section_pnp() -> list:
-    lines = []
     try:
-        raw = _powershell(PS_PNP)
-        data = json.loads(raw) if raw else []
-    except Exception as e:
-        return [f"Не удалось получить список устройств Windows: {e!r}"]
-    if isinstance(data, dict):
-        data = [data]
+        devices = discover_windows_devices()
+    except Exception as exc:
+        return [f"Не удалось получить список устройств Windows: {exc!r}"]
 
-    lines.append("— Bluetooth-устройства: заряд, который знает Windows —")
-    bt = [d for d in data if re.match(r"^(BTHENUM|BTHLE)\\DEV_", d.get("id", ""), re.I)]
-    if not bt:
-        lines.append("  (Bluetooth-устройств не найдено)")
-    for d in bt:
-        batt = d.get("battery")
-        lines.append(f"  {d.get('name') or '?'}  | статус {d.get('status')}  | заряд: "
-                     f"{str(batt) + '%' if batt is not None else 'Windows НЕ сообщает'}")
+    if not devices:
+        return ["  (подходящих Windows PnP-устройств не найдено)"]
 
-    lines.append("")
-    lines.append("— USB/HID: пары VID:PID (так находят приёмники и донглы) —")
-    seen = {}
-    for d in data:
-        m = VID_PID.search(d.get("id", ""))
-        if m and d.get("id", "").upper().startswith(("USB", "HID")):
-            key = (m.group(1).upper(), m.group(2).upper())
-            seen.setdefault(key, set()).add(d.get("name") or d.get("cls") or "?")
-    for (vid, pid), names in sorted(seen.items()):
-        lines.append(f"  {vid}:{pid}  {'; '.join(sorted(names))}")
-    if not seen:
-        lines.append("  (не найдено)")
+    lines = []
+    for device in devices:
+        battery = f'{device["battery"]}%' if device["battery"] is not None else "Windows не сообщает"
+        lines.append(
+            f'  {device["name"]} | {device["manufacturer"]} | '
+            f'{device["vid_pid"]} | {device["device_class"]} | '
+            f'{device["transport"]} | статус {device["status"]} | заряд: {battery}'
+        )
     return lines
 
 

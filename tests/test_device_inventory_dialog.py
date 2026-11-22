@@ -35,11 +35,30 @@ class DeviceInventoryDialogTests(unittest.TestCase):
             "battery_related_page": False,
             "protocol_hint": "Vendor-defined interface; manufacturer protocol required",
         }]
-        dialog = DeviceInventoryDialog(discover_fn=lambda: devices)
+        windows_devices = [{
+            "id": "pnp:abcdef123456",
+            "name": "ARDOR Receiver",
+            "manufacturer": "ARDOR GAMING",
+            "device_class": "USB",
+            "status": "OK",
+            "connected": True,
+            "transport": "USB",
+            "vendor_id": "25A7",
+            "product_id": "FA7C",
+            "vid_pid": "25A7:FA7C",
+            "battery": None,
+            "kind": "device",
+        }]
+        dialog = DeviceInventoryDialog(
+            discover_fn=lambda: devices,
+            discover_windows_fn=lambda: windows_devices,
+        )
 
         self.assertEqual(dialog.table.rowCount(), 1)
+        self.assertEqual(dialog.windows_table.rowCount(), 1)
         self.assertIn("ARDOR GAMING", dialog.report_text())
         self.assertIn("25A7:FA7C", dialog.report_text())
+        self.assertIn("PnP | ARDOR Receiver", dialog.report_text())
         self.assertNotIn("serial_number", dialog.report_text().lower())
         dialog.close()
 

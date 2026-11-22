@@ -13,7 +13,7 @@ Peripheral Control Center brings battery information from supported wireless dev
 - Low-battery and fully-charged notifications.
 - Per-device display names, device categories, visibility, refresh interval, and language settings.
 - Russian and English interface strings.
-- HID inventory window showing every interface visible to hidapi, including devices without battery telemetry.
+- Device inventory with separate HID-interface and Windows PnP views, including devices without battery telemetry.
 - Copyable HID inventory report without raw HID paths or serial numbers.
 - Full Windows / Bluetooth / HID diagnostics report accessible from the tray menu.
 - Battery history and an approximate remaining-time estimate based on collected history.
@@ -89,7 +89,8 @@ The GitHub Actions workflow in `.github/workflows/ci.yml` runs the tests on Wind
 app files (current implementation)
 ├── battery_tray.py       # Windows tray app, UI, battery providers
 ├── device_inventory.py   # Read-only HID enumeration and metadata normalization
-├── device_inventory_dialog.py # HID inventory UI
+├── windows_device_inventory.py # Read-only Windows PnP discovery and normalization
+├── device_inventory_dialog.py # HID and Windows PnP inventory UI
 ├── hidpp.py              # Logitech HID++ communication
 ├── history.py            # Battery history and estimates
 ├── taskbar.py            # Windows taskbar geometry and mini-widget

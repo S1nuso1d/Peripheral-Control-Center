@@ -61,3 +61,15 @@ The full diagnostic report is also available from the tray menu. It combines Win
 ### Next discovery milestone
 
 The current inventory is HID-focused. It does not yet represent every non-HID PnP node, Bluetooth GATT service, or composite-device parent/child relationship. Those require a separate Windows device-enumeration layer and explicit device identity rules. Vendor protocol writes must remain disabled until validated against the exact physical model and receiver.
+
+
+## Implemented: Windows PnP inventory
+
+The inventory window now has two views:
+
+- HID interfaces — interfaces returned by hidapi, including vendor-defined usage pages.
+- Windows devices — relevant present PnP nodes returned by the Windows PnP cmdlets, including USB, HID, Bluetooth and audio endpoint classes.
+
+The Windows PnP normalizer exposes friendly name, manufacturer, device class, status, transport, VID/PID when present, and the Bluetooth battery property when Windows reports it. Raw PnP instance IDs and complete hardware-ID strings are never returned from the normalizer; a short SHA-256 fingerprint is used for stable identifiers.
+
+A single physical device can create several PnP nodes (for example a parent, receiver and HID child). The inventory is intentionally a diagnostic view, not yet a deduplicated user-facing device list. The next step is correlating parent/child nodes and linking them to battery-provider results without merging distinct devices that happen to share a VID/PID.
