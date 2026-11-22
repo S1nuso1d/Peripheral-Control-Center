@@ -62,9 +62,9 @@ The discovery layer deliberately does not expose raw HID paths or serial numbers
 
 The full diagnostic report is also available from the tray menu. It combines Windows PnP, Bluetooth battery-property, HID interface, and XInput observations. This makes it possible to tell whether Windows sees a device even when no supported battery provider can read it.
 
-### Next discovery milestone
+### Provider diagnostics
 
-Windows PnP inventory also checks the generic `System.Devices.BatteryLife` property when available, then falls back to `DEVPKEY_Bluetooth_Battery`. The provider diagnostics distinguish missing dependencies, no advertised BLE Battery Service, failed GATT reads, missing standard HID usages, and successful readings.
+Windows PnP inventory checks the generic `System.Devices.BatteryLife` property when available, then falls back to `DEVPKEY_Bluetooth_Battery`. The provider diagnostics distinguish missing dependencies, no advertised BLE Battery Service, failed GATT reads, missing standard HID usages, and successful readings.
 
 The BLE provider cannot discover a Battery Service that a peripheral does not advertise. The HID provider can only decode standard usages exposed in readable input/feature reports. Proprietary 2.4 GHz receivers, and devices exposing custom vendor pages, still require an exact VID/PID/model-specific provider. Vendor report writes and undocumented commands remain disabled until validated against the exact physical model and receiver.
 
@@ -76,7 +76,7 @@ The inventory window now has two views:
 - HID interfaces — interfaces returned by hidapi, including vendor-defined usage pages.
 - Windows devices — relevant present PnP nodes returned by the Windows PnP cmdlets, including USB, HID, Bluetooth and audio endpoint classes.
 
-The Windows PnP normalizer exposes friendly name, manufacturer, device class, status, transport, VID/PID when present, and the Bluetooth battery property when Windows reports it. Raw PnP instance IDs and complete hardware-ID strings are never returned from the normalizer; a short SHA-256 fingerprint is used for stable identifiers.
+The Windows PnP normalizer exposes friendly name, manufacturer, device class, status, transport, VID/PID when present, and the battery value and source when Windows reports `System.Devices.BatteryLife` or `DEVPKEY_Bluetooth_Battery`. Raw PnP instance IDs and complete hardware-ID strings are never returned from the normalizer; a short SHA-256 fingerprint is used for stable identifiers.
 
 A single physical device can create several PnP nodes (for example a parent, receiver and HID child). The inventory is intentionally a diagnostic view, not yet a deduplicated user-facing device list. The next step is correlating parent/child nodes and linking them to battery-provider results without merging distinct devices that happen to share a VID/PID.
 
