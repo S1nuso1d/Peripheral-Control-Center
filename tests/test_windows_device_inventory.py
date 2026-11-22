@@ -68,6 +68,23 @@ class WindowsDeviceInventoryTests(unittest.TestCase):
         self.assertNotIn(r"USB\VID_1234", serialized)
         self.assertRegex(device["id"], r"^pnp:[0-9a-f]{12}$")
 
+    def test_normalizes_coarse_charging_source_without_claiming_exact_precision(self):
+        rows = [{
+            "name": "Wireless keyboard",
+            "manufacturer": "Example",
+            "status": "OK",
+            "deviceClass": "HIDClass",
+            "instanceId": r"HID\\VID_1234&PID_5678\\INSTANCE",
+            "batteryPlusCharging": 150,
+        }]
+
+        device = normalize_pnp_devices(rows)[0]
+        self.assertEqual(device["battery"], 60)
+        self.assertEqual(device["battery_source"], "System.Devices.BatteryPlusCharging")
+        self.assertEqual(device["battery_precision"], "coarse")
+        self.assertTrue(device["charging_known"])
+        self.assertTrue(device["charging"])
+
     def test_decodes_windows_battery_plus_charging_bands(self):
         from windows_device_inventory import decode_battery_plus_charging
 
