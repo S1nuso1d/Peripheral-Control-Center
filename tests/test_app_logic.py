@@ -37,13 +37,31 @@ class PureLogicTests(unittest.TestCase):
         bt = self.bt
         dev = {"id": "a", "name": "Mouse", "battery": 50, "connected": True,
                "kind": "mouse", "source": "bluetooth"}
-        saved = list(bt.PROVIDERS)
+        saved, saved_hid = list(bt.PROVIDERS), bt.discover_hid_interfaces
         try:
+            bt.discover_hid_interfaces = lambda: []
             bt.PROVIDERS[:] = [("ok", lambda: [dev, dict(dev, id="b")]), ("bad", lambda: 1 / 0)]
             res = bt.collect_devices()
         finally:
             bt.PROVIDERS[:] = saved
+            bt.discover_hid_interfaces = saved_hid
         self.assertEqual([d["name"] for d in res], ["Mouse"])
+
+    def test_collect_reports_connected_devices_without_battery(self):
+        bt = self.bt
+        saved = (list(bt.PROVIDERS), bt.discover_hid_interfaces, bt.BT_WITHOUT_BATTERY)
+        try:
+            bt.PROVIDERS[:] = []
+            bt.BT_WITHOUT_BATTERY = [{"name": "Headset B", "connected": True, "kind": "headphones"}]
+            bt.discover_hid_interfaces = lambda: [{
+                "vendor_id": 0x25A7, "product_id": 0xFA7C, "product": "ARDOR Receiver",
+                "manufacturer": "ARDOR GAMING", "vendor_defined": True, "transport": "USB"}]
+            bt.collect_devices()
+            found = [(u["name"], u["reason"]) for u in bt.UNSUPPORTED]
+        finally:
+            bt.PROVIDERS[:] = saved[0]
+            bt.discover_hid_interfaces, bt.BT_WITHOUT_BATTERY = saved[1], saved[2]
+        self.assertEqual(found, [("Headset B", "bluetooth"), ("ARDOR Receiver", "vendor")])
 
     def test_tooltip_line(self):
         t = self.bt.App.tooltip_line
@@ -87,6 +105,29 @@ class UiSmokeTests(unittest.TestCase):
         p.set_devices(self.devices())
         self.assertEqual(p.height(), collapsed + bt.Popup.CHART_H)
         self.assertFalse(p.grab().isNull())
+
+    def test_popup_shows_found_but_unreadable_devices(self):
+        import battery_tray as bt
+        extra = [{"name": "Headset B", "kind": "headphones", "reason": "bluetooth", "detail": ""},
+                 {"name": "ARDOR Receiver", "kind": "mouse", "reason": "vendor", "detail": "25A7:FA7C"}]
+        p = bt.Popup()
+        p.set_devices(self.devices())
+        plain = p.height()
+        p.set_devices(self.devices(), extra)
+        self.assertEqual(p.height(), plain + p.unsupported_height())
+        self.assertGreater(p.unsupported_height(), 0)
+        self.assertFalse(p.grab().isNull())
+        # Ничего не читается, но устройства видны: карточка не должна быть «пустой».
+        p.set_devices([], extra)
+        self.assertGreater(p.height(), p.PAD * 2 + p.EMPTY_H)
+        self.assertFalse(p.grab().isNull())
+        # Больше U_SHOW записей — добавляется строка «и ещё N».
+        many = [dict(extra[0], name=f"Dev {i}") for i in range(p.U_SHOW + 2)]
+        p.set_devices([], many)
+        self.assertEqual(p.unsupported_height(), p.U_HEAD + p.U_SHOW * p.UROW_H + p.U_MORE_H)
+        self.assertFalse(p.grab().isNull())
+        p.set_devices([], [])
+        self.assertEqual(p.unsupported_height(), 0)
 
     def test_popup_empty(self):
         import battery_tray as bt

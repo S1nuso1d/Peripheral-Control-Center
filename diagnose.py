@@ -142,6 +142,22 @@ def section_battery_providers(force: bool = False) -> list:
     elif not app_status.get("hidpp"):
         lines.append("Logitech HID++: провайдер ещё не запускался в этом процессе")
 
+    try:
+        import vendor_hid
+        profiles, load_errors = vendor_hid.load_profiles()
+        lines.append(f"Vendor HID (vendor_profiles.json): профилей: {len(profiles)}")
+        for error in load_errors:
+            lines.append(f"  ошибка профиля: {error}")
+        if force and profiles:
+            devices = vendor_hid.read_devices(profiles=profiles)
+            lines.append(f"  прочитано устройств: {len(devices)}")
+            for device in devices:
+                lines.append(f'  {device["name"]}: {device["battery"]}%')
+            for error in vendor_hid.diagnostics().get("errors", []):
+                lines.append(f"  ошибка чтения: {error}")
+    except Exception as exc:
+        lines.append(f"Vendor HID: ошибка провайдера: {exc!r}")
+
     return lines or ["  (провайдеры не вернули результатов)"]
 
 

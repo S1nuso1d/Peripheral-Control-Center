@@ -1,0 +1,18 @@
+{
+  "_readme": "Copy to %LOCALAPPDATA%\\BatteryTray\\vendor_profiles.json and edit. Write a profile only from a hid_probe.py capture or a documented protocol. Method 'request' sends bytes to the device and needs \"allow_write\": true.",
+  "profiles": [
+    {
+      "enabled": false,
+      "name": "Example Mouse (replace)",
+      "kind": "mouse",
+      "vid": "1234",
+      "pid": "ABCD",
+      "usage_page": "FF00",
+      "method": "feature",
+      "report_id": 9,
+      "length": 33,
+      "battery": {"offset": 5, "min": 0, "max": 100, "invalid": [255]},
+      "charging": {"offset": 6, "mask": 1}
+    }
+  ]
+}

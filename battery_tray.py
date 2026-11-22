@@ -30,12 +30,16 @@ from PySide6.QtCore import (QDir, QLockFile, QObject, QPoint, QPointF, QProperty
 from PySide6.QtGui import (QAction, QActionGroup, QColor, QCursor, QFont,
                            QFontMetrics, QGuiApplication, QIcon, QPainter, QPen, QPixmap,
                            QPolygonF)
-from PySide6.QtWidgets import QApplication, QMenu, QSystemTrayIcon, QWidget
+from PySide6.QtWidgets import QApplication, QInputDialog, QMenu, QSystemTrayIcon, QWidget
 
 import hidpp
 import ble_battery
 import hid_battery
 from windows_device_inventory import discover_windows_devices
+from device_inventory import discover_hid_interfaces
+import detected
+import hid_probe
+import vendor_hid
 import i18n
 import taskbar
 from history import History, format_hours
@@ -227,12 +231,15 @@ def guess_kind(name: str) -> str:
 
 # --- Провайдеры данных -------------------------------------------------------
 
+BT_WITHOUT_BATTERY: list = []   # paired Bluetooth devices for which Windows publishes no battery
+UNSUPPORTED: list = []          # what the popup shows under "found, but no battery data"
+
+
 def provider_bluetooth() -> list:
-    out = []
+    global BT_WITHOUT_BATTERY
+    out, without = [], []
     for iid, dev in _bt_nodes():
         raw = _prop(dev, K_BATTERY)
-        if not raw or raw[0] > 100:
-            continue
         conn = _prop(dev, K_CONNECTED)
         # если Windows не сообщает статус подключения — считаем устройство подключённым
         connected = True if not conn else bool(conn[0])
@@ -241,8 +248,13 @@ def provider_bluetooth() -> list:
         kind = None
         if cod_raw and len(cod_raw) >= 4:
             kind = kind_from_cod(int.from_bytes(cod_raw[:4], "little"))
+        kind = kind or guess_kind(name)
+        if not raw or raw[0] > 100:
+            without.append({"name": name, "connected": connected, "kind": kind})
+            continue
         out.append({"id": iid, "name": name, "battery": raw[0], "connected": connected,
-                    "kind": kind or guess_kind(name), "source": "bluetooth"})
+                    "kind": kind, "source": "bluetooth"})
+    BT_WITHOUT_BATTERY = without
     return out
 
 
@@ -348,6 +360,14 @@ def provider_windows_pnp() -> list:
         return [dict(device) for device in _windows_battery_cache]
 
 
+def provider_vendor_hid() -> list:
+    """Devices described in vendor_profiles.json (2.4 GHz receivers etc.)."""
+    out = vendor_hid.read_devices()
+    for device in out:
+        device["kind"] = device.get("kind") or guess_kind(device["name"])
+    return out
+
+
 PROVIDERS = [
     ("bluetooth", provider_bluetooth),
     ("ble_gatt", provider_ble_battery),
@@ -355,6 +375,7 @@ PROVIDERS = [
     ("windows_pnp", provider_windows_pnp),
     ("xinput", provider_xinput),
     ("hidpp", provider_logitech),
+    ("vendor_hid", provider_vendor_hid),
 ]
 DISABLED_PROVIDERS: set = set()
 PROVIDER_STATUS: dict = {}
@@ -391,6 +412,12 @@ def collect_devices() -> list:
         if cur is None or (d["connected"] and not cur["connected"]):
             best[d["name"].lower()] = d
     result = sorted(best.values(), key=lambda d: (not d["connected"], d["name"].lower()))
+    try:
+        hid_interfaces = discover_hid_interfaces()
+    except Exception:  # hidapi missing/failing: the Bluetooth part of the list still works
+        hid_interfaces = []
+    UNSUPPORTED[:] = detected.build_unsupported(BT_WITHOUT_BATTERY, hid_interfaces,
+                                                [d["name"] for d in result])
     return result
 
 
@@ -471,6 +498,7 @@ class Popup(QWidget):
     """Карточка со списком устройств. Клик по строке раскрывает график заряда,
     клик по графику переключает период (24 ч → 3 дня → 7 дней)."""
     W, PAD, ROW_H, CHART_H = 300, 14, 68, 104
+    EMPTY_H, U_HEAD, UROW_H, U_SHOW, U_MORE_H = 34, 26, 40, 4, 18
     PERIODS = (24, 72, 168)
 
     def __init__(self):
@@ -479,6 +507,7 @@ class Popup(QWidget):
         self.theme = DARK
         self.last_hidden = 0.0
         self.devices = []
+        self.unsupported = []  # найдено, но заряд недоступен
         self.expanded = None  # orig-имя устройства с раскрытым графиком
         self.period = 24
         self._anchor = None
@@ -492,12 +521,24 @@ class Popup(QWidget):
     def row_height(self, d) -> int:
         return self.ROW_H + (self.CHART_H if d.get("orig") == self.expanded else 0)
 
-    def set_devices(self, devices):
+    def unsupported_height(self) -> int:
+        if not self.unsupported:
+            return 0
+        shown = min(len(self.unsupported), self.U_SHOW)
+        more = self.U_MORE_H if len(self.unsupported) > self.U_SHOW else 0
+        return self.U_HEAD + shown * self.UROW_H + more
+
+    def set_devices(self, devices, unsupported=None):
         self.devices = devices
+        if unsupported is not None:
+            self.unsupported = unsupported
         if self.expanded not in {d.get("orig") for d in devices}:
             self.expanded = None
-        total = sum(self.row_height(d) for d in devices) if devices else self.ROW_H
-        self.setFixedSize(self.W, self.PAD * 2 + total)
+        if devices:
+            base = sum(self.row_height(d) for d in devices)
+        else:
+            base = self.EMPTY_H if self.unsupported else self.ROW_H
+        self.setFixedSize(self.W, self.PAD * 2 + base + self.unsupported_height())
         if self.isVisible() and self._anchor is not None:
             self._place(self._anchor)  # высота изменилась — пересчитать положение
         self.update()
@@ -553,7 +594,7 @@ class Popup(QWidget):
         p.setBrush(t["bg"])
         p.drawRoundedRect(QRectF(0.5, 0.5, self.width() - 1, self.height() - 1), 14, 14)
 
-        if not self.devices:
+        if not self.devices and not self.unsupported:
             p.setPen(t["muted"])
             p.setFont(QFont("Segoe UI", 10))
             p.drawText(QRectF(0, 0, self.width(), self.height()), Qt.AlignCenter,
@@ -564,9 +605,53 @@ class Popup(QWidget):
         icon_font.setFamilies(ICON_FAMILIES)
         icon_font.setPixelSize(22)
         top = self.PAD
+        if not self.devices:  # ничего не читается — но показываем, что система всё же видит
+            p.setPen(t["muted"])
+            p.setFont(QFont("Segoe UI", 10))
+            p.drawText(QRectF(self.PAD, top, self.width() - 2 * self.PAD, self.EMPTY_H - 6),
+                       Qt.AlignLeft | Qt.AlignVCenter, tr("no_devices_popup"))
+            top += self.EMPTY_H
         for d in self.devices:
             self._paint_row(p, t, d, top, icon_font)
             top += self.row_height(d)
+        if self.unsupported:
+            self._paint_unsupported(p, t, top)
+
+    def _paint_unsupported(self, p, t, top):
+        """Подвал: подключённые устройства, заряд которых получить не удалось, и почему."""
+        left, right = self.PAD + 46, self.width() - self.PAD
+        p.setPen(QPen(t["border"], 1))
+        p.drawLine(QPointF(self.PAD, top + 2), QPointF(right, top + 2))
+        p.setFont(QFont("Segoe UI", 8, QFont.DemiBold))
+        p.setPen(t["muted"])
+        p.drawText(QRectF(self.PAD, top + 6, right - self.PAD, 16),
+                   Qt.AlignLeft | Qt.AlignVCenter, tr("unsup_header"))
+        top += self.U_HEAD
+        glyph_font = QFont()
+        glyph_font.setFamilies(ICON_FAMILIES)
+        glyph_font.setPixelSize(16)
+        for item in self.unsupported[:self.U_SHOW]:
+            p.setFont(glyph_font)
+            p.setPen(t["dim"])
+            p.drawText(QRectF(self.PAD, top, 36, self.UROW_H), Qt.AlignCenter,
+                       GLYPHS.get(item["kind"], GLYPHS["device"]))
+            p.setFont(QFont("Segoe UI", 9))
+            p.setPen(t["fg"])
+            name = p.fontMetrics().elidedText(item["name"], Qt.ElideRight, right - left)
+            p.drawText(QRectF(left, top + 4, right - left, 16), Qt.AlignLeft | Qt.AlignVCenter, name)
+            p.setFont(QFont("Segoe UI", 8))
+            p.setPen(t["muted"])
+            reason = (tr("unsup_vendor", item["detail"]) if item["reason"] == "vendor"
+                      else tr("unsup_bluetooth"))
+            reason = p.fontMetrics().elidedText(reason, Qt.ElideRight, right - left)
+            p.drawText(QRectF(left, top + 21, right - left, 14), Qt.AlignLeft | Qt.AlignVCenter, reason)
+            top += self.UROW_H
+        more = len(self.unsupported) - self.U_SHOW
+        if more > 0:
+            p.setFont(QFont("Segoe UI", 8))
+            p.setPen(t["muted"])
+            p.drawText(QRectF(left, top, right - left, self.U_MORE_H),
+                       Qt.AlignLeft | Qt.AlignVCenter, tr("unsup_more", more))
 
     def _paint_row(self, p, t, d, top, icon_font):
         alive = d["connected"]
@@ -888,6 +973,7 @@ class App:
         m.addAction(tr("m_refresh"), self.refresh_devices)
         m.addAction(tr("m_inventory"), self.open_inventory_dialog)
         m.addAction(tr("m_diagnostics"), self.open_diagnostics_report)
+        m.addAction(tr("m_probe"), self.run_hid_probe)
 
         sub = m.addMenu(tr("m_devices"))
         if not self.devices:
@@ -961,6 +1047,36 @@ class App:
             log.exception("cannot create diagnostics report")
             self.notify(tr("diagnostics_error_title"), tr("diagnostics_error_message"),
                         QSystemTrayIcon.Warning)
+
+    def run_hid_probe(self):
+        """Read-only capture of a 2.4 GHz receiver's HID reports (no writes to the device)."""
+        try:
+            groups = hid_probe.candidate_groups()
+        except Exception:
+            log.exception("probe: cannot list devices")
+            groups = []
+        if not groups:
+            self.notify(tr("probe_title"), tr("probe_none"), QSystemTrayIcon.Warning)
+            return
+        label, ok = QInputDialog.getItem(None, tr("probe_title"), tr("probe_pick"),
+                                         [g["label"] for g in groups], 0, False)
+        if not ok:
+            return
+        battery, ok = QInputDialog.getInt(None, tr("probe_title"), tr("probe_battery"),
+                                          -1, -1, 100)
+        if not ok:
+            return
+        vid_pid = next(g["vid_pid"] for g in groups if g["label"] == label)
+
+        def work():
+            try:
+                path = hid_probe.write_report(DATA_DIR, vid_pid, battery if battery >= 0 else None)
+                os.startfile(str(path))
+            except Exception:
+                log.exception("hid probe failed")
+
+        threading.Thread(target=work, daemon=True).start()
+        self.notify(tr("probe_title"), tr("probe_started"))
 
     # --- обработчики настроек ---
 
@@ -1127,7 +1243,7 @@ class App:
 
     def render(self):
         vis = self.visible_devices()
-        self.popup.set_devices(vis)
+        self.popup.set_devices(vis, list(UNSUPPORTED))
         live = [d for d in vis if d["connected"]]
         if live:
             lowest = min(live, key=lambda device: device["battery"])

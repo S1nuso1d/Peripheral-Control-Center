@@ -86,3 +86,14 @@ A single physical device can create several PnP nodes (for example a parent, rec
 The inventory now displays a candidate count for each HID interface. Candidates require an exact VID/PID match and a compatible or unknown transport. Multiple PnP nodes are preserved and listed individually in the copied report.
 
 This is intentionally not physical-device deduplication: VID/PID can be shared by parent, receiver and child nodes, and no candidate is automatically merged into a single device. The relationship is a diagnostic hint only.
+
+
+## Implemented: 2.4 GHz workflow (probe → profile → provider)
+
+Proprietary receivers are handled in three read-only-by-default steps so that support is built from captured facts:
+
+- `detected.py` builds the popup footer from what providers observed: paired Bluetooth devices that are connected but publish no battery, and USB/2.4 GHz HID groups (by VID:PID) with a vendor-defined interface. Devices that already have a reading are excluded.
+- `hid_probe.py` captures a device for analysis. It reads the descriptor-declared feature report IDs through the Windows HID parser, issues GET_FEATURE for exactly those reports, and listens passively for input reports. It never writes. A known battery % (from the manufacturer app) marks matching bytes, including the 0–255 scaling.
+- `vendor_hid.py` reads `vendor_profiles.json` and turns a profile into a provider: interface selection (VID/PID, optional usage page/usage/interface), method (`feature`, `input`, or `request`), battery byte with range/invalid values and optional charging bit. Invalid or out-of-range values are rejected, never guessed. `request` writes to the device and is disabled unless the profile sets `"allow_write": true`.
+
+A vendor profile ships only after it has been validated on the physical model. Unknown stays unknown: a receiver whose mouse is asleep returns no reading, not 0 %.

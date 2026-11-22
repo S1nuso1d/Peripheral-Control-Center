@@ -16,6 +16,8 @@ Peripheral Control Center brings battery information from supported wireless dev
 - Device inventory with separate HID-interface and Windows PnP views, including devices without battery telemetry.
 - Copyable HID inventory report without raw HID paths or serial numbers.
 - Full Windows / Bluetooth / HID diagnostics report accessible from the tray menu, including provider outcomes and read errors.
+- "Found, but battery data unavailable" footer in the popup (connected Bluetooth devices without a Windows battery property, USB/2.4 GHz devices with a vendor-defined HID interface).
+- Read-only HID probe (`hid_probe.py`) and profile-driven vendor provider (`vendor_hid.py`, `vendor_profiles.json`) for 2.4 GHz devices.
 - Windows PnP battery properties, including `System.Devices.BatteryLife` and `System.Devices.BatteryPlusCharging` when published. Windows' categorical values are shown as approximate bands, not exact percentages.
 - Bluetooth LE Battery Service (0x180F) reads of Battery Level (0x2A19) and Battery Level Status (0x2BED), including charging state; can also consume Battery Level Status broadcast in service data without connecting. Scans only devices advertising that service.
 - Standard HID battery readings: Generic Device Controls / Battery Strength (0x06/0x20), Battery System state-of-charge fields (0x85/0x64–0x65), and remaining/full capacity ratio (0x85/0x66–0x67).
@@ -26,6 +28,16 @@ Peripheral Control Center brings battery information from supported wireless dev
   - **Generic HID** — interfaces exposing standard battery usages in input or feature reports; requires `hidapi` and Windows HID parser support.
   - **XInput** — compatible wireless Xbox controllers; the API reports coarse battery levels rather than an exact percentage.
   - **Logitech HID++** — supported Logitech devices using compatible USB receivers; requires `hidapi`.
+
+### 2.4 GHz receivers and other vendor-protocol devices
+
+A 2.4 GHz receiver is not a standard battery interface, so these devices need data, not guesses:
+
+1. **See what is connected.** The popup now lists devices that Windows sees but whose battery could not be read, with the reason ("Windows does not report a battery for this Bluetooth device" or "2.4 GHz/USB: vendor protocol needed (VID:PID)"). An empty battery list no longer looks like "nothing is connected".
+2. **Capture the receiver.** Tray menu → *Probe 2.4 GHz device…* (or `python hid_probe.py 25A7:FA7C --battery 87`). The probe is read-only: it requests only feature reports that the device's own HID descriptor declares and listens passively for input reports. It never writes to the device. Enter the battery % shown by the manufacturer's app; bytes matching it are marked. Run it twice at different charge levels.
+3. **Describe the device in a profile.** Copy `vendor_profiles.example.json` to `%LOCALAPPDATA%\BatteryTray\vendor_profiles.json` and fill in VID/PID, interface, report ID and the battery byte. Methods: `feature` (GET_FEATURE) and `input` are read-only; `request` sends a command and only runs with `"allow_write": true` — use it only for a documented command. No code change is needed for a new model once its profile is known.
+
+Shipped vendor profiles: none yet — a profile is added only after it has been validated on the physical device.
 
 ### Important compatibility note
 
@@ -100,6 +112,10 @@ app files (current implementation)
 ├── hidpp.py              # Logitech HID++ communication
 ├── ble_battery.py        # Standard Bluetooth LE Battery Service
 ├── hid_battery.py        # Standard Windows HID battery report parser
+├── detected.py           # Connected devices without battery data, and why
+├── hid_probe.py          # Read-only HID capture for vendor protocols
+├── vendor_hid.py         # Profile-driven provider (vendor_profiles.json)
+├── vendor_profiles.example.json
 ├── history.py            # Battery history and estimates
 ├── taskbar.py            # Windows taskbar geometry and mini-widget
 ├── settings_dialog.py    # Device settings dialog
