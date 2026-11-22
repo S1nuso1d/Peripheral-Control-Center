@@ -68,6 +68,20 @@ class WindowsDeviceInventoryTests(unittest.TestCase):
         self.assertNotIn(r"USB\VID_1234", serialized)
         self.assertRegex(device["id"], r"^pnp:[0-9a-f]{12}$")
 
+    def test_decodes_windows_battery_plus_charging_bands(self):
+        from windows_device_inventory import decode_battery_plus_charging
+
+        self.assertEqual(decode_battery_plus_charging(5), (5, False))
+        self.assertEqual(decode_battery_plus_charging(18), (18, False))
+        self.assertEqual(decode_battery_plus_charging(60), (60, False))
+        self.assertEqual(decode_battery_plus_charging(95), (95, False))
+        self.assertEqual(decode_battery_plus_charging(105), (5, True))
+        self.assertEqual(decode_battery_plus_charging(120), (18, True))
+        self.assertEqual(decode_battery_plus_charging(150), (60, True))
+        self.assertEqual(decode_battery_plus_charging(195), (95, True))
+        self.assertIsNone(decode_battery_plus_charging(201))
+        self.assertIsNone(decode_battery_plus_charging("unknown"))
+
     def test_accepts_single_object_and_empty_results(self):
         single = {
             "name": "Bluetooth mouse",
