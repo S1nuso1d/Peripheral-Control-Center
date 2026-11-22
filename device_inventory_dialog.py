@@ -180,7 +180,10 @@ class DeviceInventoryDialog(QDialog):
 
         lines.extend(["", tr("windows_inventory_count", len(self._windows_devices))])
         for device in self._windows_devices:
-            battery = f'{device["battery"]}%' if device["battery"] is not None else "unknown"
+            battery = (
+                f'≈{device["battery"]}%' if device.get("battery_precision") == "coarse"
+                else f'{device["battery"]}%'
+            ) if device["battery"] is not None else "unknown"
             lines.append(
                 f'PnP | {device["name"]} | {device["manufacturer"]} | '
                 f'{device["vid_pid"]} | {device["device_class"]} | '
