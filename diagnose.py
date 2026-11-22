@@ -80,9 +80,13 @@ def section_battery_providers(force: bool = False) -> list:
 
     try:
         import ble_battery
-        status = ble_battery.diagnostics()
-        devices = (ble_battery.read_devices(force=True) if force else
-                   ble_battery.read_devices() if status.get("status") != "not_scanned" else [])
+        if force:
+            devices = ble_battery.read_devices(force=True)
+            status = ble_battery.diagnostics()
+        else:
+            status = ble_battery.diagnostics()
+            devices = (ble_battery.read_devices()
+                       if status.get("status") != "not_scanned" else [])
         lines.append(
             f'BLE Battery Service: {status.get("status")} | '
             f'видно BLE: {status.get("scanned", 0)} | '
@@ -98,9 +102,13 @@ def section_battery_providers(force: bool = False) -> list:
 
     try:
         import hid_battery
-        status = hid_battery.diagnostics()
-        devices = (hid_battery.read_devices(force=True) if force else
-                   hid_battery.read_devices() if status.get("status") != "not_scanned" else [])
+        if force:
+            devices = hid_battery.read_devices(force=True)
+            status = hid_battery.diagnostics()
+        else:
+            status = hid_battery.diagnostics()
+            devices = (hid_battery.read_devices()
+                       if status.get("status") != "not_scanned" else [])
         lines.append(
             f'Standard HID Battery Strength: {status.get("status")} | '
             f'интерфейсов: {status.get("interfaces", 0)} | '
@@ -157,8 +165,8 @@ def build_report(force_provider_scan: bool = False) -> str:
         out.append("")
     out += [
         "## Как читать",
-        "• Если у устройства «Windows НЕ сообщает» заряд, а оно на донгле 2.4 ГГц — процент",
-        "  можно получить только по протоколу производителя (нужны VID:PID и модель).",
+        "• Для донглов 2.4 ГГц сначала проверьте стандартные HID Battery System/Strength.",
+        "  Если их нет, потребуется отдельный протокол производителя для VID/PID и модели.",
         "• BLE Battery Service читается только у устройств, рекламирующих службу 0x180F;",
         "  отсутствие рекламы не доказывает, что у устройства нет GATT-батареи.",
         "• Standard HID Battery Strength — это HID Generic Device Controls 0x06/0x20.",
