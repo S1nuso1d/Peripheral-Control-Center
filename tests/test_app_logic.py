@@ -101,6 +101,7 @@ class UiSmokeTests(unittest.TestCase):
         self.assertGreater(w.width(), 1)
         self.assertFalse(w.grab().isNull())
         self.assertFalse(bt.make_tray_icon(42).isNull())
+        self.assertFalse(bt.make_tray_icon(42, approximate=True).isNull())
         self.assertFalse(bt.make_tray_icon(None).isNull())
 
     def test_devices_dialog_roundtrip(self):
