@@ -15,23 +15,29 @@ Peripheral Control Center brings battery information from supported wireless dev
 - Russian and English interface strings.
 - Device inventory with separate HID-interface and Windows PnP views, including devices without battery telemetry.
 - Copyable HID inventory report without raw HID paths or serial numbers.
-- Full Windows / Bluetooth / HID diagnostics report accessible from the tray menu.
+- Full Windows / Bluetooth / HID diagnostics report accessible from the tray menu, including provider outcomes and read errors.
+- Windows PnP battery properties, including `System.Devices.BatteryLife` when Windows publishes it.
+- Bluetooth LE Battery Service (0x180F) reads of Battery Level (0x2A19), through Bleak; scans only devices advertising that service.
+- Standard HID battery readings: Generic Device Controls / Battery Strength (0x06/0x20), Battery System state-of-charge fields (0x85/0x64–0x65), and remaining/full capacity ratio (0x85/0x66–0x67).
 - Battery history and an approximate remaining-time estimate based on collected history.
 - Separate data providers for the currently implemented sources:
-  - **Bluetooth / Windows device properties** — devices for which Windows exposes the `DEVPKEY_Bluetooth_Battery` property.
+  - **Bluetooth / Windows device properties** — devices for which Windows exposes `DEVPKEY_Bluetooth_Battery` or `System.Devices.BatteryLife`.
+  - **Bluetooth LE GATT** — devices that advertise the standard Battery Service and permit a read of Battery Level; requires `bleak`.
+  - **Generic HID** — interfaces exposing standard battery usages in input or feature reports; requires `hidapi` and Windows HID parser support.
   - **XInput** — compatible wireless Xbox controllers; the API reports coarse battery levels rather than an exact percentage.
   - **Logitech HID++** — supported Logitech devices using compatible USB receivers; requires `hidapi`.
 
 ### Important compatibility note
 
-A device being paired or visible in Windows does **not** guarantee that Windows exposes its battery percentage. The current version does not yet include a dedicated ARDOR GAMING provider, nor generic Razer, SteelSeries, Corsair, or other vendor-receiver support. These integrations require device-specific protocol research and testing.
+A device being paired or visible in Windows does **not** guarantee that Windows exposes its battery percentage. The current version does not yet include dedicated ARDOR GAMING, Razer, SteelSeries, Corsair, or other proprietary receiver providers. A 2.4 GHz receiver is not a standard battery interface: each vendor/model may require a documented or reverse-engineered protocol and physical validation. BLE devices that do not advertise Battery Service 0x180F may also need a paired-device GATT lookup or a manufacturer-specific provider.
 
 ## Requirements
 
 - Windows 10 or Windows 11.
 - Python 3.10 or newer (Python 3.12 is used by the build workflow).
 - `PySide6` for the desktop interface.
-- `hidapi` for the existing Logitech HID++ provider. It is optional if Logitech receiver support is not needed.
+- `hidapi` for Logitech HID++ and standard HID battery report discovery.
+- `bleak` for Bluetooth LE GATT Battery Service reads.
 
 ## Run from source
 
