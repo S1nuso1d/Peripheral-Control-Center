@@ -98,6 +98,8 @@ app files (current implementation)
 ├── windows_device_inventory.py # Read-only Windows PnP discovery and normalization
 ├── device_inventory_dialog.py # HID and Windows PnP inventory UI
 ├── hidpp.py              # Logitech HID++ communication
+├── ble_battery.py        # Standard Bluetooth LE Battery Service
+├── hid_battery.py        # Standard Windows HID battery report parser
 ├── history.py            # Battery history and estimates
 ├── taskbar.py            # Windows taskbar geometry and mini-widget
 ├── settings_dialog.py    # Device settings dialog
@@ -117,13 +119,12 @@ The current data directory remains `%LOCALAPPDATA%\BatteryTray` for compatibilit
 
 ## Roadmap
 
-1. Stabilize the current Windows application and its test/build workflow.
-2. Introduce a documented provider interface and normalized device model.
-3. Expand inventory discovery from HID interfaces to relevant Windows PnP and Bluetooth device nodes.
-4. Add provider-result diagnostics that connect each discovered interface to the telemetry source that attempted to read it.
-5. Implement and physically validate an ARDOR GAMING provider for the user's device models.
-6. Add providers for more manufacturers and connection types.
-7. Expand monitoring beyond battery level where hardware and public protocols allow it.
+1. Validate BLE and standard HID providers against physical devices on Windows 10 and 11.
+2. Add paired-device BLE GATT lookup for peripherals that do not advertise the Battery Service UUID.
+3. Correlate discovered PnP/HID/BLE interfaces to a single physical-device record without merging unrelated devices.
+4. Implement and physically validate vendor providers for the exact models and receivers identified in diagnostics (starting with ARDOR GAMING where present).
+5. Add further Logitech, Razer, SteelSeries, Corsair and other protocol adapters when the device protocol is documented or safely verified.
+6. Expand telemetry to charging state, battery health, temperature and cycle count only where the device actually exposes those measurements.
 
 See [docs/architecture-and-roadmap.md](docs/architecture-and-roadmap.md) for the proposed provider architecture.
 
