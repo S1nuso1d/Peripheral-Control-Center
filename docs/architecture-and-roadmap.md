@@ -5,7 +5,7 @@
 The current application is a Windows/PySide6 system-tray program. Device discovery and battery reads are performed by provider functions registered in `battery_tray.py`:
 
 - `provider_bluetooth()` reads Windows Bluetooth battery properties.
-- `provider_ble_battery()` delegates to `ble_battery.py`, which reads the standard BLE Battery Service (0x180F) / Battery Level (0x2A19) with Bleak.
+- `provider_ble_battery()` delegates to `ble_battery.py`, which reads standard BLE Battery Service (0x180F) Battery Level (0x2A19) and Battery Level Status (0x2BED), including charging state. It can also decode Battery Level Status sent as Service Data in an advertisement without opening a GATT connection.
 - `provider_hid_battery()` delegates to `hid_battery.py`, which parses standard HID Battery Strength and Battery System input/feature reports using Windows HidP APIs.
 - `provider_xinput()` reads XInput battery information for compatible controllers.
 - `provider_logitech()` delegates to the Logitech HID++ implementation in `hidpp.py`.
