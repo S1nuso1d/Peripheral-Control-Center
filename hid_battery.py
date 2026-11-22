@@ -210,7 +210,7 @@ def _cap_target_usages(cap: HIDP_VALUE_CAPS) -> tuple[int, ...]:
 
     if cap.IsRange:
         return tuple(usage for usage in targets
-                     if cap.UsageMin <= usage <= cap.UsageMax)
+                     if cap.Range.UsageMin <= usage <= cap.Range.UsageMax)
 
     usage = int(cap.NotRange.Usage)
     return (usage,) if usage in targets else ()
