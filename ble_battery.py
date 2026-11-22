@@ -131,6 +131,16 @@ def parse_battery_level_status(raw: bytes | bytearray) -> dict[str, Any] | None:
     }
 
 
+def advertised_battery_status(advertisement: Any) -> dict[str, Any] | None:
+    """Read Battery Level Status broadcast as Bluetooth Service Data (0x180F)."""
+    service_data = getattr(advertisement, "service_data", None) or {}
+    for service_uuid, payload in service_data.items():
+        if _canonical_uuid(service_uuid) != BATTERY_SERVICE_UUID:
+            continue
+        return parse_battery_level_status(payload)
+    return None
+
+
 def _kind_from_name(name: str) -> str:
     value = name.casefold()
     if any(term in value for term in ("head", "earbud", "buds", "airpod", "науш")):
@@ -192,6 +202,30 @@ async def _scan_and_read() -> tuple[list[dict], dict]:
             continue
         name = (getattr(advertisement, "local_name", None)
                 or getattr(device, "name", None) or "Bluetooth LE device")
+
+        # Battery Level Status may be broadcast as Service Data (0x180F).
+        # Read it without connecting when it contains a real level value.
+        broadcast_status = advertised_battery_status(advertisement)
+        if broadcast_status and broadcast_status.get("battery") is not None:
+            item = {
+                "id": _stable_id(address, 0),
+                "name": name,
+                "battery": broadcast_status["battery"],
+                "connected": True,
+                "kind": _kind_from_name(name),
+                "source": "ble_gatt",
+                "metadata": {
+                    "service_uuid": BATTERY_SERVICE_UUID,
+                    "characteristic_uuid": BATTERY_LEVEL_STATUS_UUID,
+                    "delivery": "advertisement",
+                },
+            }
+            if broadcast_status.get("charging_known"):
+                item["charging"] = broadcast_status["charging"]
+                item["charging_known"] = True
+            results.append(item)
+            continue
+
         try:
             client = BleakClient(device, timeout=CONNECT_TIMEOUT)
             async with client:
