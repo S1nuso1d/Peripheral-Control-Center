@@ -48,6 +48,7 @@ STR = {
     "m_hidpp": ("Logitech на донглах (HID++)", "Logitech on dongles (HID++)"),
     "m_ble_battery": ("Bluetooth LE: стандартная служба батареи", "Bluetooth LE: standard Battery Service"),
     "m_hid_battery": ("Стандартные HID-отчёты заряда", "Standard HID battery reports"),
+    "m_windows_pnp": ("Заряд из свойств Windows PnP", "Battery from Windows PnP properties"),
     "m_widget": ("Мини-виджет у панели задач", "Taskbar mini-widget"),
     "m_widget_reset": ("Сбросить положение виджета", "Reset widget position"),
     "m_per_device": ("Отдельная иконка для каждого устройства", "Separate tray icon per device"),
