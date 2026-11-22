@@ -1,11 +1,12 @@
 """Peripheral Control Center — мониторинг компьютерной периферии в Windows.
 
 Источники данных (провайдеры):
-  * bluetooth — заряд, который Windows хранит для любых Bluetooth-устройств
-                (Classic и LE), читается напрямую через SetupAPI/CfgMgr32;
-  * xinput    — геймпады Xbox на радиоадаптере (уровень грубый: 4 ступени);
-  * hidpp     — устройства Logitech на донглах (нужен пакет hidapi), с точным
-                статусом зарядки.
+  * bluetooth — DEVPKEY_Bluetooth_Battery из Windows;
+  * ble_gatt  — стандартная BLE Battery Service (нужен bleak);
+  * hid_battery — стандартные HID Battery Strength / Battery System (hidapi);
+  * windows_pnp — батарейные свойства Windows PnP (в т.ч. грубый заряд/статус);
+  * xinput    — геймпады Xbox (четыре категории заряда);
+  * hidpp     — Logitech HID++ для совместимых приёмников (hidapi).
 Новый источник = новая функция provider_xxx() в списке PROVIDERS.
 История заряда (history.py) даёт оценку «хватит ещё ≈ N ч» и признак зарядки.
 
