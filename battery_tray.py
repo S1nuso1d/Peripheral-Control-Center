@@ -34,6 +34,7 @@ from PySide6.QtWidgets import QApplication, QMenu, QSystemTrayIcon, QWidget
 import hidpp
 import ble_battery
 import hid_battery
+from windows_device_inventory import discover_windows_devices
 import i18n
 import taskbar
 from history import History, format_hours
@@ -59,6 +60,7 @@ def setup_logging():
 
 DEFAULTS = {"refresh_sec": 60, "low_level": 15, "show_offline": False, "hidden": [],
             "hidpp": True, "ble_battery": True, "hid_battery": True,
+            "windows_pnp": True,
             "widget": True, "widget_dx": 0, "widget_dy": 0,
             "names": {}, "kinds": {}, "notify_charged": True,
             "tray_mode": "single", "lang": "auto"}
@@ -296,10 +298,57 @@ def provider_hid_battery() -> list:
     return out
 
 
+_windows_battery_cache = []
+_windows_battery_cache_at = 0.0
+_windows_battery_cache_lock = threading.Lock()
+
+
+def provider_windows_pnp() -> list:
+    """Read Windows' published battery values with a bounded PnP refresh rate."""
+    global _windows_battery_cache, _windows_battery_cache_at
+    with _windows_battery_cache_lock:
+        now = time.monotonic()
+        if _windows_battery_cache_at and now - _windows_battery_cache_at < 120:
+            return [dict(device) for device in _windows_battery_cache]
+
+        devices = discover_windows_devices()
+        out = []
+        for device in devices:
+            if device.get("battery") is None or not device.get("connected"):
+                continue
+            kind = device.get("kind") or guess_kind(device["name"])
+            item = {
+                "id": device["id"],
+                "name": device["name"],
+                "battery": device["battery"],
+                "connected": True,
+                "kind": kind,
+                "source": "windows_pnp",
+                "battery_source": device.get("battery_source"),
+                "battery_precision": device.get("battery_precision", "reported"),
+            }
+            if device.get("charging_known"):
+                item["charging"] = bool(device.get("charging"))
+                item["charging_known"] = True
+            if device.get("battery_precision") == "coarse":
+                item["label"] = {
+                    5: tr("lvl_critical"),
+                    18: tr("lvl_low"),
+                    60: tr("lvl_medium"),
+                    95: tr("lvl_full"),
+                }.get(device["battery"], tr("lvl_medium"))
+            out.append(item)
+
+        _windows_battery_cache = out
+        _windows_battery_cache_at = time.monotonic()
+        return [dict(device) for device in _windows_battery_cache]
+
+
 PROVIDERS = [
     ("bluetooth", provider_bluetooth),
     ("ble_gatt", provider_ble_battery),
     ("hid_battery", provider_hid_battery),
+    ("windows_pnp", provider_windows_pnp),
     ("xinput", provider_xinput),
     ("hidpp", provider_logitech),
 ]
@@ -649,8 +698,8 @@ class TaskbarWidget(QWidget):
     def set_devices(self, devices):
         self.devices = sorted(devices, key=lambda d: d["battery"])[:4]
         fm = QFontMetrics(self.text_font)
-        self.widths = [self.ICON + 4 + fm.horizontalAdvance(f"{d['battery']}%")
-                       for d in self.devices]
+        self.widths = [self.ICON + 4 + fm.horizontalAdvance(
+            d.get("label") or f"{d['battery']}%") for d in self.devices]
         total = self.PAD * 2 + sum(self.widths) + self.GAP * max(len(self.widths) - 1, 0)
         self.setFixedSize(max(total, 1), self.H)
         self.light = taskbar_is_light()
@@ -682,7 +731,7 @@ class TaskbarWidget(QWidget):
             p.setFont(self.text_font)
             p.setPen(level_color(d["battery"], self.light))
             p.drawText(QRectF(x + self.ICON + 4, 0, w - self.ICON - 4, self.height()),
-                       Qt.AlignLeft | Qt.AlignVCenter, f"{d['battery']}%")
+                       Qt.AlignLeft | Qt.AlignVCenter, d.get("label") or f"{d['battery']}%")
             x += w + self.GAP
 
     def mousePressEvent(self, e):
@@ -790,6 +839,8 @@ class App:
             DISABLED_PROVIDERS.add("ble_gatt")
         if not self.settings["hid_battery"]:
             DISABLED_PROVIDERS.add("hid_battery")
+        if not self.settings["windows_pnp"]:
+            DISABLED_PROVIDERS.add("windows_pnp")
         self.devices = []
         self.notified, self.notified_full = set(), set()
         self.dev_trays = {}  # orig-имя -> отдельная иконка в трее
@@ -855,6 +906,8 @@ class App:
                         self.set_ble_battery)
         self.check_item(m, "m_hid_battery", self.settings["hid_battery"],
                         self.set_hid_battery)
+        self.check_item(m, "m_windows_pnp", self.settings["windows_pnp"],
+                        self.set_windows_pnp)
 
         self.radio_menu(m, tr("m_interval"), "refresh_sec",
                         [(v, tr(f"i{v}")) for v in (30, 60, 120, 300)], self.set_interval)
@@ -964,10 +1017,23 @@ class App:
         hid_battery.invalidate_cache()
         self.monitor.refresh()
 
+    def set_windows_pnp(self, on):
+        self.settings.set("windows_pnp", on)
+        (DISABLED_PROVIDERS.discard if on else DISABLED_PROVIDERS.add)("windows_pnp")
+        self.invalidate_windows_battery_cache()
+        self.monitor.refresh()
+
+    @staticmethod
+    def invalidate_windows_battery_cache():
+        global _windows_battery_cache_at
+        with _windows_battery_cache_lock:
+            _windows_battery_cache_at = 0.0
+
     def refresh_devices(self):
-        """Force BLE and HID providers to query hardware on a manual refresh."""
+        """Force BLE, HID and Windows PnP providers to query hardware on refresh."""
         ble_battery.invalidate_cache()
         hid_battery.invalidate_cache()
+        self.invalidate_windows_battery_cache()
         self.monitor.refresh()
 
     def set_interval(self, sec):
