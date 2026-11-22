@@ -71,7 +71,9 @@ $rows = foreach ($device in $devices) {
         $hardwareIds = @($p.Data)
     } catch {}
 
-    if ($null -eq $battery -and $null -eq $batteryPlusCharging -and $device.InstanceId -match '^(BTHENUM|BTHLE)\\DEV_') {
+    if ($null -eq $battery -and
+        ($null -eq $batteryPlusCharging -or $batteryPlusCharging -eq 201) -and
+        $device.InstanceId -match '^(BTHENUM|BTHLE)\\DEV_') {
         try {
             $p = Get-PnpDeviceProperty -InstanceId $device.InstanceId -KeyName '{104EA319-6EE2-4701-BD47-8DDBF425BBE5} 2' -ErrorAction Stop
             if ($null -ne $p.Data) {
