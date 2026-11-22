@@ -70,6 +70,7 @@ STR = {
     "inventory_tab_windows": ("Устройства Windows", "Windows devices"),
     "inventory_class": ("Класс", "Class"),
     "inventory_battery": ("Заряд", "Battery"),
+    "inventory_battery_source": ("Источник заряда", "Battery source"),
     "inventory_status": ("Статус", "Status"),
     "windows_inventory_hint": ("Список получен из Windows PnP. В нём могут быть отдельные узлы одного составного устройства; совпадения по VID/PID помогают найти приёмник, но не доказывают поддержку его протокола.",
                               "This list comes from Windows PnP. A composite device may have multiple nodes; matching VID/PID helps identify a receiver but does not prove its protocol is supported."),
