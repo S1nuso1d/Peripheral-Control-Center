@@ -73,3 +73,10 @@ The inventory window now has two views:
 The Windows PnP normalizer exposes friendly name, manufacturer, device class, status, transport, VID/PID when present, and the Bluetooth battery property when Windows reports it. Raw PnP instance IDs and complete hardware-ID strings are never returned from the normalizer; a short SHA-256 fingerprint is used for stable identifiers.
 
 A single physical device can create several PnP nodes (for example a parent, receiver and HID child). The inventory is intentionally a diagnostic view, not yet a deduplicated user-facing device list. The next step is correlating parent/child nodes and linking them to battery-provider results without merging distinct devices that happen to share a VID/PID.
+
+
+## Implemented: conservative HID ↔ PnP correlation
+
+The inventory now displays a candidate count for each HID interface. Candidates require an exact VID/PID match and a compatible or unknown transport. Multiple PnP nodes are preserved and listed individually in the copied report.
+
+This is intentionally not physical-device deduplication: VID/PID can be shared by parent, receiver and child nodes, and no candidate is automatically merged into a single device. The relationship is a diagnostic hint only.
