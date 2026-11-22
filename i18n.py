@@ -72,6 +72,7 @@ STR = {
     "inventory_class": ("Класс", "Class"),
     "inventory_battery": ("Заряд", "Battery"),
     "inventory_battery_source": ("Источник заряда", "Battery source"),
+    "inventory_charging": ("Зарядка", "Charging"),
     "not_charging": ("Не заряжается", "Not charging"),
     "inventory_status": ("Статус", "Status"),
     "windows_inventory_hint": ("Список получен из Windows PnP. В нём могут быть отдельные узлы одного составного устройства; совпадения по VID/PID помогают найти приёмник, но не доказывают поддержку его протокола.",
