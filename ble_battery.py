@@ -24,8 +24,8 @@ log = logging.getLogger("BatteryTray.ble")
 BATTERY_SERVICE_UUID = "0000180f-0000-1000-8000-00805f9b34fb"
 BATTERY_LEVEL_UUID = "00002a19-0000-1000-8000-00805f9b34fb"
 SCAN_SECONDS = 4.0
-CONNECT_TIMEOUT = 5.0
-MAX_CANDIDATES = 6
+CONNECT_TIMEOUT = 3.5
+MAX_CANDIDATES = 4
 CACHE_SECONDS = 240.0
 
 try:
@@ -53,10 +53,16 @@ _last_status: dict[str, Any] = {
 
 
 def _canonical_uuid(value: Any) -> str:
+    raw = str(value or "").strip().lower()
+    # Advertisement parsers may return 16-bit or 32-bit Bluetooth UUIDs.
+    if len(raw) == 4:
+        raw = f"0000{raw}-0000-1000-8000-00805f9b34fb"
+    elif len(raw) == 8:
+        raw = f"{raw}-0000-1000-8000-00805f9b34fb"
     try:
-        return str(uuid.UUID(str(value))).lower()
+        return str(uuid.UUID(raw)).lower()
     except (ValueError, TypeError, AttributeError):
-        return str(value or "").lower()
+        return raw
 
 
 def _kind_from_name(name: str) -> str:
