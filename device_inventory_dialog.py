@@ -24,7 +24,7 @@ class DeviceInventoryDialog(QDialog):
     WINDOWS_COLUMNS = (
         "inventory_device", "inventory_manufacturer", "inventory_vid_pid",
         "inventory_class", "inventory_transport", "inventory_battery",
-        "inventory_battery_source", "inventory_status",
+        "inventory_battery_source", "inventory_charging", "inventory_status",
     )
 
     def __init__(self, parent=None, discover_fn=None, discover_windows_fn=None):
