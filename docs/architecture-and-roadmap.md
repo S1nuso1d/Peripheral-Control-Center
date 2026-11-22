@@ -4,9 +4,13 @@
 
 The current application is a Windows/PySide6 system-tray program. Device discovery and battery reads are performed by provider functions registered in `battery_tray.py`:
 
-- `provider_bluetooth()` reads the Windows Bluetooth battery device property.
+- `provider_bluetooth()` reads Windows Bluetooth battery properties.
+- `provider_ble_battery()` delegates to `ble_battery.py`, which reads the standard BLE Battery Service (0x180F) / Battery Level (0x2A19) with Bleak.
+- `provider_hid_battery()` delegates to `hid_battery.py`, which parses standard HID Battery Strength and Battery System input/feature reports using Windows HidP APIs.
 - `provider_xinput()` reads XInput battery information for compatible controllers.
 - `provider_logitech()` delegates to the Logitech HID++ implementation in `hidpp.py`.
+
+The BLE provider intentionally scans only for advertisements containing the Battery Service UUID before connecting. The generic HID provider only reads report usages explicitly declared by the descriptor; it does not send output reports or SET_FEATURE commands.
 
 `collect_devices()` combines provider results, handles provider exceptions, and deduplicates devices by their display name. The UI and history layer consume normalized dictionaries.
 
@@ -60,7 +64,9 @@ The full diagnostic report is also available from the tray menu. It combines Win
 
 ### Next discovery milestone
 
-The current inventory is HID-focused. It does not yet represent every non-HID PnP node, Bluetooth GATT service, or composite-device parent/child relationship. Those require a separate Windows device-enumeration layer and explicit device identity rules. Vendor protocol writes must remain disabled until validated against the exact physical model and receiver.
+Windows PnP inventory also checks the generic `System.Devices.BatteryLife` property when available, then falls back to `DEVPKEY_Bluetooth_Battery`. The provider diagnostics distinguish missing dependencies, no advertised BLE Battery Service, failed GATT reads, missing standard HID usages, and successful readings.
+
+The BLE provider cannot discover a Battery Service that a peripheral does not advertise. The HID provider can only decode standard usages exposed in readable input/feature reports. Proprietary 2.4 GHz receivers, and devices exposing custom vendor pages, still require an exact VID/PID/model-specific provider. Vendor report writes and undocumented commands remain disabled until validated against the exact physical model and receiver.
 
 
 ## Implemented: Windows PnP inventory
