@@ -14,6 +14,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import logging
+import re
 import threading
 import time
 import uuid
@@ -36,6 +37,18 @@ except Exception as exc:  # optional on systems where BLE GATT is unavailable
     _IMPORT_ERROR = str(exc)
 else:
     _IMPORT_ERROR = ""
+
+_MAC_ADDRESS = re.compile(
+    r"(?<![0-9A-F])(?:[0-9A-F]{2}[:-]){5}[0-9A-F]{2}(?![0-9A-F])",
+    re.IGNORECASE,
+)
+
+
+def _safe_error(exc: BaseException) -> str:
+    """Redact Bluetooth MAC addresses from diagnostics and logs."""
+    value = f"{type(exc).__name__}: {exc}"
+    return _MAC_ADDRESS.sub("[Bluetooth address redacted]", value)[:240]
+
 
 _lock = threading.Lock()
 _cache: list[dict] = []
@@ -101,7 +114,7 @@ async def _scan_and_read() -> tuple[list[dict], dict]:
         return [], {
             "provider": "ble_gatt", "available": True, "status": "scan_failed",
             "scanned": 0, "candidates": 0, "read": 0,
-            "errors": [f"{type(exc).__name__}: {exc}"[:240]],
+            "errors": [_safe_error(exc)],
             "last_scan": time.time(),
         }
 
@@ -164,7 +177,7 @@ async def _scan_and_read() -> tuple[list[dict], dict]:
         except Exception as exc:
             # A service UUID in advertising is only a candidate; it does not
             # guarantee the device is connectable or permits a GATT read.
-            errors.append(f"{name}: {type(exc).__name__}: {exc}"[:240])
+            errors.append(f"{name}: {_safe_error(exc)}")
 
     status = {
         "provider": "ble_gatt",
@@ -198,7 +211,7 @@ def read_devices(force: bool = False) -> list[dict]:
             status = {
                 "provider": "ble_gatt", "available": BleakScanner is not None,
                 "status": "event_loop_error", "scanned": 0, "candidates": 0,
-                "read": 0, "errors": [str(exc)[:240]], "last_scan": time.time(),
+                "read": 0, "errors": [_safe_error(exc)], "last_scan": time.time(),
             }
         except Exception as exc:
             log.exception("BLE battery provider failed")
