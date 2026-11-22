@@ -46,6 +46,8 @@ STR = {
     "m_configure": ("Настроить устройства…", "Configure devices…"),
     "m_show_offline": ("Показывать отключённые", "Show disconnected"),
     "m_hidpp": ("Logitech на донглах (HID++)", "Logitech on dongles (HID++)"),
+    "m_ble_battery": ("Bluetooth LE: стандартная служба батареи", "Bluetooth LE: standard Battery Service"),
+    "m_hid_battery": ("Стандартные HID-отчёты заряда", "Standard HID battery reports"),
     "m_widget": ("Мини-виджет у панели задач", "Taskbar mini-widget"),
     "m_widget_reset": ("Сбросить положение виджета", "Reset widget position"),
     "m_per_device": ("Отдельная иконка для каждого устройства", "Separate tray icon per device"),
