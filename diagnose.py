@@ -63,6 +63,56 @@ def section_hid() -> list:
     return lines or ["  (HID-интерфейсов не найдено)"]
 
 
+def section_battery_providers() -> list:
+    """Run the new read-only providers once and include explicit outcomes."""
+    lines = []
+
+    try:
+        import ble_battery
+        devices = ble_battery.read_devices(force=True)
+        status = ble_battery.diagnostics()
+        lines.append(
+            f'BLE Battery Service: {status.get("status")} | '
+            f'видно BLE: {status.get("scanned", 0)} | '
+            f'кандидатов: {status.get("candidates", 0)} | '
+            f'прочитано: {len(devices)}'
+        )
+        for device in devices:
+            lines.append(f'  {device["name"]}: {device["battery"]}%')
+        for error in status.get("errors", []):
+            lines.append(f'  ошибка BLE: {error}')
+    except Exception as exc:
+        lines.append(f'BLE Battery Service: ошибка провайдера: {exc!r}')
+
+    try:
+        import hid_battery
+        devices = hid_battery.read_devices(force=True)
+        status = hid_battery.diagnostics()
+        lines.append(
+            f'Standard HID Battery Strength: {status.get("status")} | '
+            f'интерфейсов: {status.get("interfaces", 0)} | '
+            f'проверено: {status.get("candidates", 0)} | '
+            f'прочитано: {len(devices)}'
+        )
+        for device in devices:
+            lines.append(f'  {device["name"]}: {device["battery"]}%')
+        for error in status.get("errors", []):
+            lines.append(f'  ошибка HID: {error}')
+    except Exception as exc:
+        lines.append(f'Standard HID Battery Strength: ошибка провайдера: {exc!r}')
+
+    try:
+        import hidpp
+        devices = hidpp.read_devices()
+        lines.append(f'Logitech HID++: прочитано устройств: {len(devices)}')
+        for device in devices:
+            lines.append(f'  {device["name"]}: {device["battery"]}%')
+    except Exception as exc:
+        lines.append(f'Logitech HID++: ошибка провайдера: {exc!r}')
+
+    return lines or ["  (провайдеры не вернули результатов)"]
+
+
 def section_xinput() -> list:
     for dll in ("xinput1_4", "xinput1_3", "xinput9_1_0"):
         try:
@@ -88,7 +138,9 @@ def section_xinput() -> list:
 def build_report() -> str:
     out = ["=== Peripheral Control Center: диагностика ===", ""]
     for title, fn in (("Система", section_system), ("Устройства Windows", section_pnp),
-                      ("HID-интерфейсы (hidapi)", section_hid), ("XInput", section_xinput)):
+                      ("HID-интерфейсы (hidapi)", section_hid),
+                      ("Провайдеры заряда (BLE / HID / Logitech)", section_battery_providers),
+                      ("XInput", section_xinput)):
         out.append(f"## {title}")
         try:
             out += fn()
@@ -99,8 +151,10 @@ def build_report() -> str:
         "## Как читать",
         "• Если у устройства «Windows НЕ сообщает» заряд, а оно на донгле 2.4 ГГц — процент",
         "  можно получить только по протоколу производителя (нужны VID:PID и модель).",
-        "• Строки с page 0xFF.. — служебные интерфейсы производителя: через них обычно и",
-        "  запрашивают заряд.",
+        "• BLE Battery Service читается только у устройств, рекламирующих службу 0x180F;",
+        "  отсутствие рекламы не доказывает, что у устройства нет GATT-батареи.",
+        "• Standard HID Battery Strength — это HID Generic Device Controls 0x06/0x20.",
+        "• Строки с page 0xFF.. — интерфейсы производителя; для них нужен протокол модели.",
     ]
     return "\n".join(out)
 
