@@ -29,9 +29,22 @@ $rows = foreach ($device in $devices) {
     $hardwareIds = @()
     $battery = $null
     $batterySource = $null
+    $batteryPlusCharging = $null
 
-    # Generic Windows shell battery property. It is not populated for every
-    # peripheral, but when present it represents remaining battery life in %.
+    # Windows also publishes a combined battery/charging status byte. Its
+    # values are categorical bands, not exact percentages; the normalizer
+    # maps them to the documented representative values and keeps the label.
+    try {
+        $p = Get-PnpDeviceProperty -InstanceId $device.InstanceId -KeyName '{49CD1F76-5626-4B17-A4E8-18B4AA1A2213} 22' -ErrorAction Stop
+        if ($null -ne $p.Data) {
+            $candidate = [int]$p.Data
+            if ($candidate -ge 0 -and $candidate -le 201) {
+                $batteryPlusCharging = $candidate
+            }
+        }
+    } catch {}
+
+    # Generic Windows shell battery property, when the combined status is absent.
     try {
         $p = Get-PnpDeviceProperty -InstanceId $device.InstanceId -KeyName '{49CD1F76-5626-4B17-A4E8-18B4AA1A2213} 10' -ErrorAction Stop
         if ($null -ne $p.Data) {
@@ -58,7 +71,7 @@ $rows = foreach ($device in $devices) {
         $hardwareIds = @($p.Data)
     } catch {}
 
-    if ($null -eq $battery -and $device.InstanceId -match '^(BTHENUM|BTHLE)\\DEV_') {
+    if ($null -eq $battery -and $null -eq $batteryPlusCharging -and $device.InstanceId -match '^(BTHENUM|BTHLE)\\DEV_') {
         try {
             $p = Get-PnpDeviceProperty -InstanceId $device.InstanceId -KeyName '{104EA319-6EE2-4701-BD47-8DDBF425BBE5} 2' -ErrorAction Stop
             if ($null -ne $p.Data) {
@@ -81,6 +94,7 @@ $rows = foreach ($device in $devices) {
         hardwareIds = @($hardwareIds)
         battery = $battery
         batterySource = $batterySource
+        batteryPlusCharging = $batteryPlusCharging
     }
 }
 
@@ -111,6 +125,33 @@ def _battery(value: Any) -> int | None:
         return None
     return number if 0 <= number <= 100 else None
 
+
+
+def decode_battery_plus_charging(value: Any) -> tuple[int, bool] | None:
+    """Decode Microsoft's categorical BatteryPlusCharging byte.
+
+    The property uses documented battery bands with representative values
+    (5, 18, 60, 95), and 100-value offsets for charging bands. It must not be
+    presented as an exact percentage.
+    """
+    try:
+        number = int(value)
+    except (TypeError, ValueError, OverflowError):
+        return None
+    bands = (
+        (0, 10, 5, False),
+        (11, 25, 18, False),
+        (26, 89, 60, False),
+        (90, 100, 95, False),
+        (101, 110, 5, True),
+        (111, 125, 18, True),
+        (126, 189, 60, True),
+        (190, 200, 95, True),
+    )
+    for minimum, maximum, representative, charging in bands:
+        if minimum <= number <= maximum:
+            return representative, charging
+    return None
 
 def _transport(instance_id: str, device_class: str) -> str:
     upper = instance_id.upper()
@@ -174,6 +215,16 @@ def normalize_pnp_devices(raw_devices: Any) -> list[dict]:
         identity = instance_id or f"{display_name}|{device_class}|{vendor_id}|{product_id}"
         fingerprint = hashlib.sha256(identity.encode("utf-8", errors="replace")).hexdigest()[:12]
         battery = _battery(raw.get("battery"))
+        charging = None
+        charging_known = False
+        battery_source = _text(raw.get("batterySource") or raw.get("battery_source"))
+        coarse = False
+        combined = decode_battery_plus_charging(raw.get("batteryPlusCharging"))
+        if combined is not None:
+            battery, charging = combined
+            charging_known = True
+            battery_source = "System.Devices.BatteryPlusCharging"
+            coarse = True
 
         normalized.append({
             "id": f"pnp:{fingerprint}",
@@ -187,7 +238,10 @@ def normalize_pnp_devices(raw_devices: Any) -> list[dict]:
             "product_id": product_id,
             "vid_pid": f"{vendor_id}:{product_id}" if vendor_id and product_id else "—",
             "battery": battery,
-            "battery_source": _text(raw.get("batterySource") or raw.get("battery_source")),
+            "battery_source": battery_source,
+            "battery_precision": "coarse" if coarse else "reported",
+            "charging": charging,
+            "charging_known": charging_known,
             "kind": _device_kind(display_name, device_class),
         })
 
