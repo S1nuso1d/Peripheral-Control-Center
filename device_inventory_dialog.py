@@ -24,7 +24,7 @@ class DeviceInventoryDialog(QDialog):
     WINDOWS_COLUMNS = (
         "inventory_device", "inventory_manufacturer", "inventory_vid_pid",
         "inventory_class", "inventory_transport", "inventory_battery",
-        "inventory_status",
+        "inventory_battery_source", "inventory_status",
     )
 
     def __init__(self, parent=None, discover_fn=None, discover_windows_fn=None):
@@ -136,6 +136,7 @@ class DeviceInventoryDialog(QDialog):
                 device["name"], device["manufacturer"], device["vid_pid"],
                 device["device_class"], device["transport"],
                 f'{device["battery"]}%' if device["battery"] is not None else "—",
+                device.get("battery_source") or "—",
                 device["status"],
             ),
         )
@@ -181,6 +182,7 @@ class DeviceInventoryDialog(QDialog):
                 f'PnP | {device["name"]} | {device["manufacturer"]} | '
                 f'{device["vid_pid"]} | {device["device_class"]} | '
                 f'{device["transport"]} | battery {battery} | '
+                f'battery source {device.get("battery_source") or "unknown"} | '
                 f'status {device["status"]} | id {device["id"]}'
             )
         return "\n".join(lines)
