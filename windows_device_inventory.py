@@ -187,6 +187,7 @@ def normalize_pnp_devices(raw_devices: Any) -> list[dict]:
             "product_id": product_id,
             "vid_pid": f"{vendor_id}:{product_id}" if vendor_id and product_id else "—",
             "battery": battery,
+            "battery_source": _text(raw.get("batterySource") or raw.get("battery_source")),
             "kind": _device_kind(display_name, device_class),
         })
 
