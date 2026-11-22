@@ -32,6 +32,8 @@ from PySide6.QtGui import (QAction, QActionGroup, QColor, QCursor, QFont,
 from PySide6.QtWidgets import QApplication, QMenu, QSystemTrayIcon, QWidget
 
 import hidpp
+import ble_battery
+import hid_battery
 import i18n
 import taskbar
 from history import History, format_hours
@@ -56,7 +58,8 @@ def setup_logging():
 # --- Настройки ---------------------------------------------------------------
 
 DEFAULTS = {"refresh_sec": 60, "low_level": 15, "show_offline": False, "hidden": [],
-            "hidpp": True, "widget": True, "widget_dx": 0, "widget_dy": 0,
+            "hidpp": True, "ble_battery": True, "hid_battery": True,
+            "widget": True, "widget_dx": 0, "widget_dy": 0,
             "names": {}, "kinds": {}, "notify_charged": True,
             "tray_mode": "single", "lang": "auto"}
 
@@ -279,19 +282,52 @@ def provider_logitech() -> list:
     return out
 
 
-PROVIDERS = [("bluetooth", provider_bluetooth), ("xinput", provider_xinput),
-             ("hidpp", provider_logitech)]
+def provider_ble_battery() -> list:
+    out = ble_battery.read_devices()
+    for device in out:
+        device["kind"] = device.get("kind") or guess_kind(device["name"])
+    return out
+
+
+def provider_hid_battery() -> list:
+    out = hid_battery.read_devices()
+    for device in out:
+        device["kind"] = device.get("kind") or guess_kind(device["name"])
+    return out
+
+
+PROVIDERS = [
+    ("bluetooth", provider_bluetooth),
+    ("ble_gatt", provider_ble_battery),
+    ("hid_battery", provider_hid_battery),
+    ("xinput", provider_xinput),
+    ("hidpp", provider_logitech),
+]
 DISABLED_PROVIDERS: set = set()
+PROVIDER_STATUS: dict = {}
 
 
 def collect_devices() -> list:
     items = []
+    PROVIDER_STATUS.clear()
     for name, fn in PROVIDERS:
         if name in DISABLED_PROVIDERS:
+            PROVIDER_STATUS[name] = {"status": "disabled", "read": 0}
             continue
+        started = time.monotonic()
         try:
-            items += fn()
-        except Exception:
+            found = fn()
+            items += found
+            PROVIDER_STATUS[name] = {
+                "status": "ok" if found else "no_data",
+                "read": len(found),
+                "duration_ms": round((time.monotonic() - started) * 1000),
+            }
+        except Exception as exc:
+            PROVIDER_STATUS[name] = {
+                "status": "error", "read": 0,
+                "error": f"{type(exc).__name__}: {exc}"[:240],
+            }
             log.exception("provider %s failed", name)
     # Геймпад, который Windows уже показывает по Bluetooth (с процентами), из XInput не берём
     if any(d["kind"] == "gamepad" and d["connected"] for d in items if d["source"] == "bluetooth"):
@@ -750,6 +786,10 @@ class App:
         i18n.set_language(self.settings["lang"])
         if not self.settings["hidpp"]:
             DISABLED_PROVIDERS.add("hidpp")
+        if not self.settings["ble_battery"]:
+            DISABLED_PROVIDERS.add("ble_gatt")
+        if not self.settings["hid_battery"]:
+            DISABLED_PROVIDERS.add("hid_battery")
         self.devices = []
         self.notified, self.notified_full = set(), set()
         self.dev_trays = {}  # orig-имя -> отдельная иконка в трее
@@ -788,7 +828,7 @@ class App:
     def build_menu(self):
         m = self.menu
         m.clear()
-        m.addAction(tr("m_refresh"), self.monitor.refresh)
+        m.addAction(tr("m_refresh"), self.refresh_devices)
         m.addAction(tr("m_inventory"), self.open_inventory_dialog)
         m.addAction(tr("m_diagnostics"), self.open_diagnostics_report)
 
@@ -811,6 +851,10 @@ class App:
         self.check_item(m, "m_notify_full", self.settings["notify_charged"],
                         lambda on: self.settings.set("notify_charged", on))
         self.check_item(m, "m_hidpp", self.settings["hidpp"], self.set_hidpp)
+        self.check_item(m, "m_ble_battery", self.settings["ble_battery"],
+                        self.set_ble_battery)
+        self.check_item(m, "m_hid_battery", self.settings["hid_battery"],
+                        self.set_hid_battery)
 
         self.radio_menu(m, tr("m_interval"), "refresh_sec",
                         [(v, tr(f"i{v}")) for v in (30, 60, 120, 300)], self.set_interval)
@@ -906,6 +950,24 @@ class App:
     def set_hidpp(self, on):
         self.settings.set("hidpp", on)
         (DISABLED_PROVIDERS.discard if on else DISABLED_PROVIDERS.add)("hidpp")
+        self.monitor.refresh()
+
+    def set_ble_battery(self, on):
+        self.settings.set("ble_battery", on)
+        (DISABLED_PROVIDERS.discard if on else DISABLED_PROVIDERS.add)("ble_gatt")
+        ble_battery.invalidate_cache()
+        self.monitor.refresh()
+
+    def set_hid_battery(self, on):
+        self.settings.set("hid_battery", on)
+        (DISABLED_PROVIDERS.discard if on else DISABLED_PROVIDERS.add)("hid_battery")
+        hid_battery.invalidate_cache()
+        self.monitor.refresh()
+
+    def refresh_devices(self):
+        """Force BLE and HID providers to query hardware on a manual refresh."""
+        ble_battery.invalidate_cache()
+        hid_battery.invalidate_cache()
         self.monitor.refresh()
 
     def set_interval(self, sec):
