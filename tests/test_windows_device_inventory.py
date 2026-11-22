@@ -179,6 +179,7 @@ class WindowsDeviceInventoryTests(unittest.TestCase):
         self.assertIn("Get-PnpDevice -PresentOnly", calls[0])
         self.assertIn("System.Devices.BatteryLife", calls[0])
         self.assertIn("System.Devices.BatteryPlusCharging", calls[0])
+        self.assertIn("49CD1F76-5626-4B17-A4E8-18B4AA1A2213} 22", calls[0])
         self.assertEqual(devices[0]["vid_pid"], "25A7:FA7C")
 
     def test_invalid_json_is_reported(self):
