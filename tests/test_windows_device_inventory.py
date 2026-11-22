@@ -24,6 +24,7 @@ class WindowsDeviceInventoryTests(unittest.TestCase):
                 "instanceId": r"BTHLE\DEV_123456789ABC\7&ABCDEF",
                 "hardwareIds": [],
                 "battery": 83,
+                "batterySource": "System.Devices.BatteryLife",
             },
             {
                 "name": "HID-compliant device",
@@ -44,6 +45,7 @@ class WindowsDeviceInventoryTests(unittest.TestCase):
         self.assertEqual(receiver["manufacturer"], "ARDOR GAMING")
         headphones = next(item for item in devices if item["transport"] == "Bluetooth")
         self.assertEqual(headphones["battery"], 83)
+        self.assertEqual(headphones["battery_source"], "System.Devices.BatteryLife")
         hid_device = next(item for item in devices if item["transport"] == "HID")
         self.assertIsNone(hid_device["battery"])
         self.assertFalse(hid_device["connected"])
@@ -95,6 +97,7 @@ class WindowsDeviceInventoryTests(unittest.TestCase):
 
         self.assertEqual(len(calls), 1)
         self.assertIn("Get-PnpDevice -PresentOnly", calls[0])
+        self.assertIn("System.Devices.BatteryLife", calls[0])
         self.assertEqual(devices[0]["vid_pid"], "25A7:FA7C")
 
     def test_invalid_json_is_reported(self):
